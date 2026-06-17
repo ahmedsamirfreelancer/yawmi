@@ -1,10 +1,11 @@
 // Service Worker — تخزين كل الملفات للعمل أوفلاين
-const CACHE = 'yawmi-v2';
+const CACHE = 'yawmi-v3';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
   './data.js',
+  './prayer.js',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',

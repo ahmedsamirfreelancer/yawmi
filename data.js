@@ -109,7 +109,7 @@ const SEEDS = {
 
 const DEFAULT_SETTINGS = {
   prayer: { lat: null, lng: null, city: '', method: 'EGYPT', asr: 'Standard', offsets: { fajr: 0, dhuhr: 0, asr: 0, maghrib: 0, isha: 0 } },
-  adhan: { enabled: true, reciter: 'makkah' },
+  adhan: { enabled: true, reciter: 'a1' },
   reminders: { sabah: '', masa: '', wird: '', sleep: '' },
   pomodoro: { focus: 25, brk: 5, long: 15 },
 };

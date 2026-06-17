@@ -133,7 +133,7 @@ function onAuth(data) {
   localStorage.setItem('yawmi_settings', JSON.stringify(S.settings));
   document.body.classList.remove('auth-mode');
   buildShell(); render();
-  syncFromServer();
+  syncFromServer(); initPrayer();
 }
 
 function logout() {
@@ -212,7 +212,7 @@ function renderDay() {
   $('#dlabel').onclick = () => { S.view = new Date(); renderDay(); };
 
   const v = L.getDay(key);
-  let html = '';
+  let html = (isToday && !S.edit) ? prayerStripHTML() : '';
   S.template.sections.forEach((sec, si) => {
     html += `<div class="section" data-si="${si}">`;
     html += `<div class="sec-head"><span ${S.edit ? 'contenteditable class="ce"' : ''} data-secedit="${si}">${esc(sec.title)}</span>${secCount(sec, v)}</div>`;
@@ -241,6 +241,7 @@ function renderDay() {
   if (S.edit) html += `<button class="add-section" id="addSec">+ قسم جديد</button>`;
   $('#screen').innerHTML = html;
   wireDay(key);
+  wirePrayer();
 }
 
 function secCount(sec, v) {
@@ -345,19 +346,49 @@ function renderProgress() {
 // ===== أدوات/إعدادات =====
 function renderTools() {
   $('#hdr').innerHTML = `<div class="h-row"><div class="h-title">أدوات وإعدادات</div></div>`;
+  const p = S.settings.prayer || {}; const ad = S.settings.adhan || {};
+  const located = p.lat != null;
+  const methodOpts = Object.entries(Prayer.METHODS).map(([k, m]) => `<option value="${k}" ${p.method === k ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
   $('#screen').innerHTML = `
-    <div class="section"><div class="sec-head"><span>قريباً</span></div>
-      <div class="soon-list">
-        <div>⏱️ مؤقّت بومودورو</div><div>📿 عدّاد التسبيح</div><div>🧭 اتجاه القبلة</div><div>🕌 مواعيد الصلاة والأذان</div>
+    <div class="section"><div class="sec-head"><span>🕌 مواعيد الصلاة والأذان</span></div>
+      <div class="setbox">
+        <div class="acct-row"><span>الموقع</span><b>${located ? esc(p.city || (p.lat + ', ' + p.lng)) : 'غير محدّد'}</b></div>
+        <button class="mini" id="locBtn2">${located ? 'تغيير الموقع' : 'حدّد موقعي'}</button>
+        ${located ? `
+        <label class="setlbl">طريقة الحساب</label>
+        <select id="mMethod">${methodOpts}</select>
+        <label class="setlbl">حساب العصر</label>
+        <div class="seg sm"><button type="button" data-asr="Standard" class="${p.asr !== 'Hanafi' ? 'on' : ''}">الجمهور</button><button type="button" data-asr="Hanafi" class="${p.asr === 'Hanafi' ? 'on' : ''}">الحنفي</button></div>
+        <label class="setlbl">تعديل بالدقائق (±)</label>
+        <div class="offs">
+          ${['fajr:الفجر', 'dhuhr:الظهر', 'asr:العصر', 'maghrib:المغرب', 'isha:العشاء'].map(o => { const [k, l] = o.split(':'); return `<div class="off"><span>${l}</span><input type="number" data-off="${k}" value="${(p.offsets && p.offsets[k]) || 0}"></div>`; }).join('')}
+        </div>
+        <div class="acct-row"><span>الأذان وقت الصلاة</span><label class="sw"><input type="checkbox" id="adhanOn" ${ad.enabled ? 'checked' : ''}><i></i></label></div>
+        <label class="setlbl">صوت الأذان</label>
+        <select id="reciter">
+          <option value="a1" ${ad.reciter === 'a1' ? 'selected' : ''}>أذان مختار ١</option>
+          <option value="a2" ${ad.reciter === 'a2' ? 'selected' : ''}>أذان مختار ٢</option>
+          <option value="a3" ${ad.reciter === 'a3' ? 'selected' : ''}>أذان مختار ٣</option>
+        </select>
+        <button class="mini ghost" id="testAdhan">▶ جرّب الأذان</button>` : ''}
       </div></div>
+    <div class="section"><div class="sec-head"><span>قريباً</span></div>
+      <div class="soon-list"><div>⏱️ مؤقّت بومودورو</div><div>📿 عدّاد التسبيح</div><div>🧭 اتجاه القبلة</div><div>📖 الحفظ والمراجعة</div></div></div>
     <div class="section"><div class="sec-head"><span>الحساب</span></div>
       <div class="acct">
         <div class="acct-row"><span>الاسم</span><b>${esc(S.user?.name || '—')}</b></div>
         <div class="acct-row"><span>الإيميل</span><b>${esc(S.user?.email || '')}</b></div>
-        <div class="acct-row"><span>المستوى المبدئي</span><b>${esc(SEEDS[S.level]?.name || S.level)}</b></div>
         <button class="logout" id="logoutBtn">تسجيل الخروج</button>
       </div></div>
     <div class="credit">اللهم اجعله صدقة جارية 🤍</div>`;
+
+  $('#locBtn2').onclick = setupLocation;
+  const mm = $('#mMethod'); if (mm) mm.onchange = () => { S.settings.prayer.method = mm.value; saveSettings(); Prayer.schedule(S.settings); renderTools(); };
+  $$('[data-asr]').forEach(b => b.onclick = () => { S.settings.prayer.asr = b.dataset.asr; saveSettings(); Prayer.schedule(S.settings); renderTools(); });
+  $$('[data-off]').forEach(i => i.onchange = () => { S.settings.prayer.offsets = S.settings.prayer.offsets || {}; S.settings.prayer.offsets[i.dataset.off] = parseInt(i.value) || 0; saveSettings(); Prayer.schedule(S.settings); });
+  const ao = $('#adhanOn'); if (ao) ao.onchange = () => { S.settings.adhan.enabled = ao.checked; saveSettings(); if (ao.checked) { Prayer.askNotify(); Prayer.schedule(S.settings); } };
+  const rc = $('#reciter'); if (rc) rc.onchange = () => { S.settings.adhan.reciter = rc.value; saveSettings(); };
+  const ta = $('#testAdhan'); if (ta) ta.onclick = () => Prayer.playAdhan(S.settings);
   $('#logoutBtn').onclick = () => { if (confirm('تسجيل الخروج؟ بياناتك محفوظة على السيرفر.')) logout(); };
 }
 
@@ -366,14 +397,59 @@ function renderSoon(title, msg) {
   $('#screen').innerHTML = `<div class="soon"><div class="soon-ic">📖</div><p>${esc(msg)}</p></div>`;
 }
 
+// ===== مواعيد الصلاة (شريط في اليوم) =====
+function prayerStripHTML() {
+  const p = (S.settings && S.settings.prayer) || {};
+  if (p.lat == null) {
+    return `<div class="psrip locate"><span>🕌 فعّل مواعيد الصلاة والأذان</span><button id="locBtn">حدّد موقعي</button></div>`;
+  }
+  const t = Prayer.timesFor(new Date(), S.settings);
+  const n = Prayer.next(S.settings);
+  let cells = '';
+  Prayer.ORDER.filter(([k]) => k !== 'sunrise').forEach(([k, lbl]) => {
+    cells += `<div class="pcell ${n && n.key === k ? 'nx' : ''}"><span>${lbl}</span><b>${Prayer.fmt(t[k])}</b></div>`;
+  });
+  const cd = n ? `الصلاة الجاية: ${n.label} بعد ${n.inMin >= 60 ? Math.floor(n.inMin / 60) + ' س ' + (n.inMin % 60) + ' د' : n.inMin + ' دقيقة'}` : '';
+  return `<div class="psrip"><div class="pcells">${cells}</div><div class="pnext">${cd}${p.city ? ' • ' + esc(p.city) : ''}</div></div>`;
+}
+function wirePrayer() {
+  const b = $('#locBtn'); if (b) b.onclick = setupLocation;
+}
+async function setupLocation() {
+  const b = $('#locBtn'); if (b) { b.textContent = 'بيحدد...'; b.disabled = true; }
+  const c = await Prayer.geolocate();
+  if (!c) { pickCity(); if (b) { b.textContent = 'حدّد موقعي'; b.disabled = false; } return; }
+  S.settings.prayer.lat = +c[0].toFixed(4); S.settings.prayer.lng = +c[1].toFixed(4); S.settings.prayer.city = '';
+  saveSettings(); Prayer.askNotify(); Prayer.schedule(S.settings); render();
+}
+function pickCity() {
+  const names = Object.keys(Prayer.CITIES);
+  const choice = prompt('اكتب اسم مدينتك من دول:\n' + names.join(' - '), 'القاهرة');
+  if (!choice || !Prayer.CITIES[choice.trim()]) return;
+  const c = Prayer.CITIES[choice.trim()];
+  S.settings.prayer.lat = c[0]; S.settings.prayer.lng = c[1]; S.settings.prayer.city = choice.trim();
+  saveSettings(); Prayer.schedule(S.settings); render();
+}
+let setT;
+function saveSettings() {
+  localStorage.setItem('yawmi_settings', JSON.stringify(S.settings));
+  clearTimeout(setT); setT = setTimeout(() => api('settings', 'POST', { settings: S.settings }).catch(() => {}), 600);
+  flash();
+}
+function initPrayer() {
+  if (S.settings && S.settings.prayer && S.settings.prayer.lat != null) { Prayer.askNotify(); Prayer.schedule(S.settings); }
+}
+
 // ===== تشغيل =====
 function boot() {
   if (S.token) {
     S.template = JSON.parse(localStorage.getItem('yawmi_template') || 'null');
     S.settings = JSON.parse(localStorage.getItem('yawmi_settings') || 'null') || DEFAULT_SETTINGS;
     if (S.template) { buildShell(); render(); }
+    if (S.settings) initPrayer();
     api('bootstrap').then(d => { S.user = d.user; S.template = d.template; S.settings = d.settings || DEFAULT_SETTINGS; S.level = d.level;
-      localStorage.setItem('yawmi_template', JSON.stringify(S.template)); if (!document.querySelector('#tabs')) buildShell(); render(); syncFromServer(); })
+      localStorage.setItem('yawmi_template', JSON.stringify(S.template)); localStorage.setItem('yawmi_settings', JSON.stringify(S.settings));
+      if (!document.querySelector('#tabs')) buildShell(); render(); syncFromServer(); initPrayer(); })
       .catch(e => { if (e.code === 401) logout(); });
   } else {
     renderAuth('login');
