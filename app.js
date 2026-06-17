@@ -1,334 +1,383 @@
 'use strict';
+/* ورقة اليوم — تطبيق متابعة (مرحلة ١): دخول + قائمة قابلة للتعديل + تقدّم + مزامنة */
 
-/* ====================== بيانات المستويات ======================
-   كل عنصر له id ثابت — لو نفس العبادة في كذا مستوى بتاخد نفس الـ id
-   عشان البيانات تفضل محفوظة لما تبدّل المستوى.
-   أنواع الأقسام: pillGroups (أزرار صف) / items (تشيك) / fields (نص/تقييم/وقت)
-=============================================================== */
-const SALAH = [
-  { id: 'salah_fajr', label: 'فجر' }, { id: 'salah_dhuhr', label: 'ظهر' },
-  { id: 'salah_asr', label: 'عصر' }, { id: 'salah_maghrib', label: 'مغرب' },
-  { id: 'salah_isha', label: 'عشا' }
-];
-const SUNAN = [
-  { id: 'sunan_fajr', label: 'الفجر', note: '٢ قبل' },
-  { id: 'sunan_dhuhr', label: 'الظهر', note: '٤ قبل + ٢ بعد' },
-  { id: 'sunan_maghrib', label: 'المغرب', note: '٢ بعد' },
-  { id: 'sunan_isha', label: 'العشا', note: '٢ بعد' }
-];
-const topGoals = { type: 'goals', title: 'أهم ٣ حاجات النهاردة',
-  fields: [{ id: 'goal1', ph: '...' }, { id: 'goal2', ph: '...' }, { id: 'goal3', ph: '...' }] };
-const beforeSleep = (extra) => ({ title: 'قبل ما أنام', fields: [
-  { id: 'rating', type: 'rating', label: 'تقييم يومك من ١٠' },
-  { id: 'best_thing', type: 'text', label: 'أحسن حاجة عملتها النهاردة' }
-].concat(extra || []) });
+const API = 'api/';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const uid = () => 'x' + Math.random().toString(36).slice(2, 9);
 
-const LEVELS = [
-  /* ===== 0 — مبتدئ ===== */
-  { name: 'مبتدئ', motto: 'ابدأ صغير… الثبات أهم من الكثرة', sections: [
-    topGoals,
-    { title: 'الفرائض والأساسيات',
-      pillGroups: [{ label: 'الصلوات', pills: SALAH }],
-      items: [
-        { id: 'sunan_fajr', label: 'السنن الرواتب', note: 'ابدأ بسنة الفجر' },
-        { id: 'athkar_sabah', label: 'أذكار الصباح', note: 'بعد الفجر' },
-        { id: 'athkar_masa', label: 'أذكار المساء', note: 'بعد العصر' },
-        { id: 'quran', label: 'القرآن', note: 'ولو صفحة' }
-      ] },
-    { title: 'أذكار اليوم — ابدأ بسيط', items: [
-        { id: 'istighfar', label: 'استغفار', note: 'ولو ٣٣' },
-        { id: 'salaa_nabi', label: 'صلاة على النبي ﷺ', note: 'ولو ١٠' }
-      ] },
-    { title: 'خير وأخلاق', items: [
-        { id: 'sadaqa', label: 'صدقة' },
-        { id: 'birr', label: 'بر الوالدين / صلة رحم' },
-        { id: 'smile', label: 'بسمة وكلمة طيبة' }
-      ] },
-    { title: 'صحة ووقت زيادة', items: [
-        { id: 'riyada', label: 'رياضة' },
-        { id: 'water', label: 'شرب مية كفاية' },
-        { id: 'sleep_early', label: 'نوم بدري' }
-      ] },
-    beforeSleep()
-  ] },
+// ===== الحالة =====
+const S = {
+  token: localStorage.getItem('yawmi_token') || '',
+  user: null, template: null, settings: null, level: 'beginner',
+  view: new Date(), tab: 'day', edit: false,
+  days: {},            // كاش القيم لكل يوم
+  progress: {},        // إنجاز الأيام للتقويم
+};
 
-  /* ===== 1 — متوسط ===== */
-  { name: 'متوسط', motto: 'لو عملت دول، كسبت يومك', sections: [
-    topGoals,
-    { title: 'الأوراد — مربوطة بالصلاة',
-      pillGroups: [
-        { label: 'الصلوات', pills: SALAH },
-        { label: 'السنن الرواتب', pills: SUNAN },
-        { label: 'القرآن', pills: [
-          { id: 'quran_read', label: 'قراءة' }, { id: 'quran_review', label: 'مراجعة' },
-          { id: 'quran_memorize', label: 'حفظ' }, { id: 'quran_tadabbur', label: 'تدبّر آية' } ] }
-      ],
-      items: [
-        { id: 'athkar_salah', label: 'أذكار بعد الصلاة', note: 'دبر كل صلاة' },
-        { id: 'athkar_sabah', label: 'أذكار الصباح', note: 'بعد الفجر' },
-        { id: 'duha', label: 'صلاة الضحى' },
-        { id: 'athkar_masa', label: 'أذكار المساء', note: 'بعد العصر' },
-        { id: 'qiyam', label: 'قيام الليل / الوتر', note: 'ولو ركعتين قبل النوم' }
-      ] },
-    { title: 'أذكار اليوم — ١٠٠ مرة لكل ذكر', items: [
-        { id: 'istighfar', label: 'استغفار' },
-        { id: 'salaa_nabi', label: 'صلاة على النبي ﷺ' },
-        { id: 'tasbeeh', label: 'سبحان الله وبحمده' }
-      ] },
-    { title: 'معاملات وأخلاق', items: [
-        { id: 'sadaqa', label: 'صدقة' },
-        { id: 'birr', label: 'بر الوالدين / صلة رحم' },
-        { id: 'siyam', label: 'صيام تطوّع' },
-        { id: 'lisan', label: 'حفظ اللسان' },
-        { id: 'basar', label: 'غض البصر' },
-        { id: 'dua', label: 'دعاء / مناجاة' }
-      ] },
-    { title: 'صحة ووقت زيادة', items: [
-        { id: 'riyada', label: 'رياضة' },
-        { id: 'water', label: 'شرب مية كفاية' },
-        { id: 'food', label: 'أكل صحي' },
-        { id: 'read_book', label: 'قراءة كتاب / حضور كورس' }
-      ] },
-    { title: 'متابعة النوم', fields: [
-        { id: 'sleep_time', type: 'time', label: 'نمت إمبارح الساعة' },
-        { id: 'wake_time', type: 'time', label: 'صحيت الساعة' }
-      ], hint: 'الهدف: نوم ١٠:٣٠ • صحيان الفجر • ما تنامش بعد الفجر' },
-    beforeSleep()
-  ] },
+const dayKey = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const todayKey = () => dayKey(new Date());
 
-  /* ===== 2 — متقدم ===== */
-  { name: 'متقدم', motto: 'إحسان ومداومة — الزَم وِردك', sections: [
-    topGoals,
-    { title: 'الأوراد — مربوطة بالصلاة',
-      pillGroups: [
-        { label: 'الصلوات', pills: SALAH },
-        { label: 'السنن الرواتب', pills: SUNAN },
-        { label: 'القرآن', pills: [
-          { id: 'quran_read', label: 'قراءة', note: 'وِرد' }, { id: 'quran_review', label: 'مراجعة' },
-          { id: 'quran_memorize', label: 'حفظ' }, { id: 'quran_tadabbur', label: 'تدبّر' },
-          { id: 'quran_tafsir', label: 'تفسير' } ] }
-      ],
-      items: [
-        { id: 'jamaa', label: 'صلاة الجماعة / في المسجد' },
-        { id: 'athkar_salah', label: 'أذكار بعد الصلاة', note: 'دبر كل صلاة' },
-        { id: 'athkar_sabah', label: 'أذكار الصباح', note: 'بعد الفجر' },
-        { id: 'duha', label: 'صلاة الضحى' },
-        { id: 'athkar_masa', label: 'أذكار المساء', note: 'بعد العصر' },
-        { id: 'qiyam', label: 'قيام الليل / الوتر' }
-      ] },
-    { title: 'أذكار اليوم — المداومة ١٠٠', items: [
-        { id: 'istighfar', label: 'استغفار' },
-        { id: 'salaa_nabi', label: 'صلاة على النبي ﷺ' },
-        { id: 'tasbeeh', label: 'سبحان الله وبحمده' },
-        { id: 'tahleel', label: 'لا إله إلا الله' },
-        { id: 'hawqala', label: 'لا حول ولا قوة إلا بالله' }
-      ] },
-    { title: 'علم وتزكية', items: [
-        { id: 'ilm', label: 'طلب علم / حضور درس' },
-        { id: 'muhasaba', label: 'محاسبة النفس' },
-        { id: 'dua_muslimeen', label: 'الدعاء للمسلمين' }
-      ] },
-    { title: 'معاملات وأخلاق', items: [
-        { id: 'sadaqa', label: 'صدقة' },
-        { id: 'birr', label: 'بر الوالدين / صلة رحم' },
-        { id: 'siyam', label: 'صيام تطوّع' },
-        { id: 'lisan', label: 'حفظ اللسان' },
-        { id: 'basar', label: 'غض البصر' },
-        { id: 'ghaydh', label: 'كظم الغيظ' }
-      ] },
-    { title: 'صحة ووقت زيادة', items: [
-        { id: 'riyada', label: 'رياضة' },
-        { id: 'water', label: 'شرب مية كفاية' },
-        { id: 'food', label: 'أكل صحي' },
-        { id: 'read_book', label: 'قراءة كتاب / كورس' }
-      ] },
-    { title: 'متابعة النوم', fields: [
-        { id: 'sleep_time', type: 'time', label: 'نمت إمبارح الساعة' },
-        { id: 'wake_time', type: 'time', label: 'صحيت الساعة' }
-      ], hint: 'الهدف: نوم ١٠:٣٠ • صحيان الفجر • ما تنامش بعد الفجر' },
-    beforeSleep()
-  ] }
-];
-
-/* ====================== التخزين ====================== */
-const DB_KEY = 'yawmi_data_v1';
-const LVL_KEY = 'yawmi_level';
-const DONE_THRESHOLD = 0.5;
-
-let DB = load();
-let level = +(localStorage.getItem(LVL_KEY) || 0);
-let viewDate = new Date();
-
-function load() { try { return JSON.parse(localStorage.getItem(DB_KEY)) || {}; } catch (e) { return {}; } }
-function persist() { localStorage.setItem(DB_KEY, JSON.stringify(DB)); flash(); }
-function dayKey(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
-function dayData(key) { return DB[key] || (DB[key] = {}); }
-function val(key, id) { return (DB[key] || {})[id]; }
-function setVal(key, id, v) {
-  const d = dayData(key);
-  if (v === false || v === '' || v == null) delete d[id]; else d[id] = v;
-  if (Object.keys(d).length === 0) delete DB[key];
-  persist();
+// ===== API =====
+async function api(route, method = 'GET', bodyObj = null) {
+  const opt = { method, headers: {} };
+  if (S.token) opt.headers['Authorization'] = 'Bearer ' + S.token;
+  if (bodyObj) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(bodyObj); }
+  const res = await fetch(API + '?r=' + route, opt);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error || 'error'), { code: res.status, data });
+  return data;
 }
 
-/* ====================== حساب الإنجاز ====================== */
-function boolIds(lvl) {
+// ===== تخزين محلي (local-first) =====
+const L = {
+  setDay(date, values) { S.days[date] = values; localStorage.setItem('yawmi_d_' + date, JSON.stringify(values)); },
+  getDay(date) {
+    if (S.days[date]) return S.days[date];
+    const raw = localStorage.getItem('yawmi_d_' + date);
+    S.days[date] = raw ? JSON.parse(raw) : {};
+    return S.days[date];
+  },
+  queue() { try { return JSON.parse(localStorage.getItem('yawmi_queue') || '[]'); } catch (e) { return []; } },
+  enqueue(date) { const q = new Set(L.queue()); q.add(date); localStorage.setItem('yawmi_queue', JSON.stringify([...q])); },
+  dequeue(date) { localStorage.setItem('yawmi_queue', JSON.stringify(L.queue().filter(d => d !== date))); },
+};
+
+async function pushDay(date) {
+  const values = L.getDay(date);
+  const completion = completionPct(date);
+  try { await api('day', 'POST', { date, values, completion }); L.dequeue(date); S.progress[date] = completion; }
+  catch (e) { L.enqueue(date); }
+}
+async function flushQueue() { for (const d of L.queue()) await pushDay(d); }
+window.addEventListener('online', flushQueue);
+
+// ===== الإنجاز =====
+function boolItems(tpl) {
   const ids = [];
-  LEVELS[lvl].sections.forEach(s => {
-    (s.pillGroups || []).forEach(g => g.pills.forEach(p => ids.push(p.id)));
-    (s.items || []).forEach(i => ids.push(i.id));
-  });
+  (tpl || S.template).sections.forEach(s => s.items.forEach(it => {
+    const k = it.kind || 'check';
+    if (k === 'check' || it.group) ids.push(it.id);
+  }));
   return ids;
 }
-function completion(key, lvl) {
-  const ids = boolIds(lvl); if (!ids.length) return 0;
-  let done = 0; ids.forEach(id => { if (val(key, id) === true) done++; });
-  return done / ids.length;
+function completionPct(date) {
+  const ids = boolItems(); if (!ids.length) return 0;
+  const v = L.getDay(date); let done = 0;
+  ids.forEach(id => { if (v[id] === true) done++; });
+  return Math.round(done / ids.length * 100);
 }
 function computeStreak() {
-  let d = new Date(); let s = 0;
-  if (completion(dayKey(d), level) < DONE_THRESHOLD) d.setDate(d.getDate() - 1);
-  while (completion(dayKey(d), level) >= DONE_THRESHOLD) { s++; d.setDate(d.getDate() - 1); }
+  let d = new Date(), s = 0;
+  const ok = k => (S.progress[k] != null ? S.progress[k] : completionPct(k)) >= 50;
+  if (!ok(dayKey(d))) d.setDate(d.getDate() - 1);
+  while (ok(dayKey(d))) { s++; d.setDate(d.getDate() - 1); }
   return s;
 }
 
-/* ====================== الرسم ====================== */
-const $ = sel => document.querySelector(sel);
-const app = $('#app');
+// ===== شاشة الدخول =====
+function renderAuth(mode = 'login') {
+  document.body.classList.add('auth-mode');
+  $('#root').innerHTML = `
+    <div class="auth">
+      <div class="auth-card">
+        <div class="brand">وَرَقة ال<b>يَوم</b></div>
+        <div class="brand-sub">رفيقك اليومي للعبادة والمتابعة</div>
+        <div class="seg">
+          <button id="tLogin" class="${mode === 'login' ? 'on' : ''}">دخول</button>
+          <button id="tReg" class="${mode === 'register' ? 'on' : ''}">حساب جديد</button>
+        </div>
+        <form id="authForm">
+          ${mode === 'register' ? `<input name="name" placeholder="اسمك" autocomplete="name">` : ''}
+          <input name="email" type="email" placeholder="الإيميل" autocomplete="email" required>
+          <input name="password" type="password" placeholder="الباسوورد" autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" required>
+          ${mode === 'register' ? `
+          <label class="lvl-label">ابدأ من مستوى:</label>
+          <div class="seg lvl">
+            <button type="button" data-lvl="beginner" class="on">مبتدئ</button>
+            <button type="button" data-lvl="intermediate">متوسط</button>
+            <button type="button" data-lvl="advanced">متقدم</button>
+          </div>` : ''}
+          <button class="primary" type="submit">${mode === 'register' ? 'أنشئ الحساب' : 'دخول'}</button>
+          <div class="err" id="authErr"></div>
+        </form>
+      </div>
+    </div>`;
+  $('#tLogin').onclick = () => renderAuth('login');
+  $('#tReg').onclick = () => renderAuth('register');
+  let chosen = 'beginner';
+  $$('.lvl button').forEach(b => b.onclick = () => { $$('.lvl button').forEach(x => x.classList.remove('on')); b.classList.add('on'); chosen = b.dataset.lvl; });
+  $('#authForm').onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target; const err = $('#authErr'); err.textContent = '';
+    const email = f.email.value.trim(), password = f.password.value;
+    try {
+      let data;
+      if (mode === 'register') {
+        const seed = JSON.parse(JSON.stringify(SEEDS[chosen]));
+        data = await api('register', 'POST', { email, password, name: f.name.value.trim(), level: chosen,
+          template: { motto: seed.motto, sections: seed.sections }, settings: DEFAULT_SETTINGS });
+      } else {
+        data = await api('login', 'POST', { email, password });
+      }
+      onAuth(data);
+    } catch (ex) { err.textContent = ex.message || 'في مشكلة، حاول تاني'; }
+  };
+}
 
-function esc(t) { return String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-const CHK = '<span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>';
+function onAuth(data) {
+  S.token = data.token; S.user = data.user; S.template = data.template; S.settings = data.settings || DEFAULT_SETTINGS; S.level = data.level;
+  localStorage.setItem('yawmi_token', S.token);
+  localStorage.setItem('yawmi_template', JSON.stringify(S.template));
+  localStorage.setItem('yawmi_settings', JSON.stringify(S.settings));
+  document.body.classList.remove('auth-mode');
+  buildShell(); render();
+  syncFromServer();
+}
+
+function logout() {
+  localStorage.removeItem('yawmi_token');
+  S.token = ''; S.user = null;
+  renderAuth('login');
+}
+
+async function syncFromServer() {
+  try { const p = await api('progress'); S.progress = p.days || {}; } catch (e) {}
+  try {
+    const today = todayKey();
+    if (!L.queue().includes(today)) {
+      const r = await api('day&date=' + today);
+      if (r.values && Object.keys(r.values).length) L.setDay(today, r.values);
+    }
+  } catch (e) {}
+  flushQueue();
+  if (S.tab === 'progress' || S.tab === 'day') render();
+}
+
+// ===== الهيكل (تبويبات) =====
+function buildShell() {
+  document.body.classList.remove('auth-mode');
+  $('#root').innerHTML = `
+    <div id="flash"></div>
+    <header id="hdr"></header>
+    <main id="screen"></main>
+    <nav id="tabs">
+      <button data-tab="day"><span>📋</span>اليوم</button>
+      <button data-tab="quran"><span>📖</span>القرآن</button>
+      <button data-tab="progress"><span>📈</span>التقدّم</button>
+      <button data-tab="tools"><span>⚙️</span>أدوات</button>
+    </nav>`;
+  $$('#tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; S.edit = false; render(); });
+}
 
 function render() {
-  const key = dayKey(viewDate);
-  const L = LEVELS[level];
-  $('#motto').textContent = L.motto;
+  if (!S.token) return renderAuth('login');
+  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+  if (S.tab === 'day') renderDay();
+  else if (S.tab === 'progress') renderProgress();
+  else if (S.tab === 'quran') renderSoon('القرآن', 'الحفظ (الحصون الخمسة) والمراجعة (رسوخ) — جايين في التحديث الجاي إن شاء الله 📖');
+  else if (S.tab === 'tools') renderTools();
+}
 
-  // level tabs
-  document.querySelectorAll('#levels button').forEach(b =>
-    b.classList.toggle('active', +b.dataset.lvl === level));
+function flash() { const f = $('#flash'); if (!f) return; f.style.transform = 'scaleX(1)'; clearTimeout(flash._t); flash._t = setTimeout(() => f.style.transform = 'scaleX(0)', 250); }
 
-  // date label (ميلادي + هجري)
-  let g = '', h = '';
-  try { g = new Intl.DateTimeFormat('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' }).format(viewDate); } catch (e) { g = key; }
-  try { h = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long' }).format(viewDate); } catch (e) {}
-  const isToday = key === dayKey(new Date());
-  $('#dateLabel').innerHTML = esc(g) + (isToday ? ' • النهاردة' : '') + (h ? '<small>' + esc(h) + ' هـ</small>' : '');
+// ===== شاشة اليوم =====
+function renderDay() {
+  const key = dayKey(S.view);
+  let g = key, h = '';
+  try { g = new Intl.DateTimeFormat('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' }).format(S.view); } catch (e) {}
+  try { h = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long' }).format(S.view); } catch (e) {}
+  const isToday = key === todayKey();
+  const pct = completionPct(key);
+  const streak = computeStreak();
 
-  // sections
+  $('#hdr').innerHTML = `
+    <div class="h-row">
+      <div class="h-title">وَرَقة ال<b>يَوم</b></div>
+      <button class="edit-btn ${S.edit ? 'on' : ''}" id="editBtn">${S.edit ? '✓ تم' : '✎ تعديل'}</button>
+    </div>
+    <div class="motto">${esc(S.template.motto || '')}</div>
+    <div class="datebar">
+      <button id="next">‹</button>
+      <div class="date" id="dlabel">${esc(g)}${isToday ? ' • النهاردة' : ''}${h ? `<small>${esc(h)} هـ</small>` : ''}</div>
+      <button id="prev">›</button>
+    </div>
+    <div class="pbar"><i style="width:${pct}%"></i></div>
+    <div class="pmeta"><span>${pct}% من يومك</span><span class="streak">🔥 ${streak} يوم متواصل</span></div>`;
+
+  $('#editBtn').onclick = () => { S.edit = !S.edit; renderDay(); };
+  $('#prev').onclick = () => { S.view.setDate(S.view.getDate() - 1); renderDay(); };
+  $('#next').onclick = () => { const t = new Date(); t.setHours(0, 0, 0, 0); const v = new Date(S.view); v.setHours(0, 0, 0, 0); if (v < t) { S.view.setDate(S.view.getDate() + 1); renderDay(); } };
+  $('#dlabel').onclick = () => { S.view = new Date(); renderDay(); };
+
+  const v = L.getDay(key);
   let html = '';
-  L.sections.forEach(s => {
-    if (s.type === 'goals') {
-      html += `<div class="section topgoals"><div class="sec-head">${esc(s.title)}</div><div class="items">`;
-      s.fields.forEach((f, i) => {
-        html += `<div class="field"><label>${i + 1} -</label><input type="text" data-id="${f.id}" placeholder="${esc(f.ph || '')}" value="${esc(val(key, f.id) || '')}"></div>`;
-      });
-      html += `</div></div>`; return;
-    }
-    // count for boolean sections
-    let cnt = '';
-    const bids = [];
-    (s.pillGroups || []).forEach(g => g.pills.forEach(p => bids.push(p.id)));
-    (s.items || []).forEach(i => bids.push(i.id));
-    if (bids.length) { const dn = bids.filter(id => val(key, id) === true).length; cnt = `<span class="cnt">${dn} من ${bids.length}</span>`; }
-
-    html += `<div class="section"><div class="sec-head"><span>${esc(s.title)}</span>${cnt}</div>`;
-
-    (s.pillGroups || []).forEach(g => {
-      html += `<div class="pills">`;
-      if (g.label) html += `<div style="width:100%;font-size:12px;color:var(--navy);font-weight:700;margin-bottom:2px">${esc(g.label)}</div>`;
-      g.pills.forEach(p => {
-        const on = val(key, p.id) === true ? ' done' : '';
-        html += `<div class="pill${on}" data-toggle="${p.id}">${esc(p.label)}${p.note ? `<small>${esc(p.note)}</small>` : ''}</div>`;
-      });
-      html += `</div>`;
-    });
-
-    if (s.items) {
-      html += `<div class="items">`;
-      s.items.forEach(it => {
-        const on = val(key, it.id) === true ? ' done' : '';
-        html += `<div class="item${on}" data-toggle="${it.id}">${CHK}<div class="lbl"><span>${esc(it.label)}</span>${it.note ? `<small>${esc(it.note)}</small>` : ''}</div></div>`;
-      });
-      html += `</div>`;
-    }
-
-    if (s.fields) {
-      html += `<div class="items">`;
-      s.fields.forEach(f => {
-        if (f.type === 'rating') {
-          const cur = val(key, f.id);
-          html += `<div class="rating" data-rating="${f.id}"><b>${esc(f.label)}</b>`;
-          for (let n = 1; n <= 10; n++) html += `<div class="rdot${cur === n ? ' on' : ''}" data-n="${n}">${n}</div>`;
-          html += `</div>`;
-        } else {
-          const t = f.type === 'time' ? 'time' : 'text';
-          html += `<div class="field"><label>${esc(f.label)}</label><input type="${t}" data-id="${f.id}" value="${esc(val(key, f.id) || '')}"></div>`;
+  S.template.sections.forEach((sec, si) => {
+    html += `<div class="section" data-si="${si}">`;
+    html += `<div class="sec-head"><span ${S.edit ? 'contenteditable class="ce"' : ''} data-secedit="${si}">${esc(sec.title)}</span>${secCount(sec, v)}</div>`;
+    html += `<div class="items">`;
+    let i = 0;
+    while (i < sec.items.length) {
+      const it = sec.items[i];
+      if (it.group && !S.edit) {
+        // اجمع المجموعة (pills)
+        let j = i, pills = '';
+        const gname = it.group;
+        while (j < sec.items.length && sec.items[j].group === gname) {
+          const p = sec.items[j];
+          pills += `<div class="pill ${v[p.id] === true ? 'on' : ''}" data-tog="${p.id}">${esc(p.label)}${p.note ? `<small>${esc(p.note)}</small>` : ''}</div>`;
+          j++;
         }
-      });
-      if (s.hint) html += `<div class="field" style="border:0"><small style="color:var(--muted)">${esc(s.hint)}</small></div>`;
-      html += `</div>`;
+        html += `<div class="pills"><div class="glabel">${esc(gname)}</div>${pills}</div>`;
+        i = j; continue;
+      }
+      html += renderItem(sec, it, si, i, v);
+      i++;
     }
-    html += `</div>`;
+    if (S.edit) html += `<button class="add-item" data-add="${si}">+ مهمة</button>`;
+    html += `</div></div>`;
   });
-  app.innerHTML = html;
-
-  // progress
-  const pct = Math.round(completion(key, level) * 100);
-  $('#pfill').style.width = pct + '%';
-  $('#ppct').innerHTML = `<bdi>${pct}%</bdi> من يومك`;
-  const st = computeStreak();
-  $('#streak').textContent = '🔥 ' + st + ' يوم متواصل';
+  if (S.edit) html += `<button class="add-section" id="addSec">+ قسم جديد</button>`;
+  $('#screen').innerHTML = html;
+  wireDay(key);
 }
 
-/* ====================== الأحداث ====================== */
-app.addEventListener('click', e => {
-  const key = dayKey(viewDate);
-  const tog = e.target.closest('[data-toggle]');
-  if (tog) { const id = tog.dataset.toggle; setVal(key, id, val(key, id) === true ? false : true); render(); return; }
-  const dot = e.target.closest('.rdot');
-  if (dot) { const wrap = dot.closest('[data-rating]'); const id = wrap.dataset.rating; const n = +dot.dataset.n;
-    setVal(key, id, val(key, id) === n ? false : n); render(); return; }
-});
-app.addEventListener('input', e => {
-  const inp = e.target.closest('input[data-id]');
-  if (inp) setVal(dayKey(viewDate), inp.dataset.id, inp.value);
-});
-
-document.querySelectorAll('#levels button').forEach(b =>
-  b.addEventListener('click', () => { level = +b.dataset.lvl; localStorage.setItem(LVL_KEY, level); render(); }));
-
-$('#prev').addEventListener('click', () => { viewDate.setDate(viewDate.getDate() - 1); render(); });
-$('#next').addEventListener('click', () => {
-  const t = new Date(); t.setHours(0, 0, 0, 0);
-  const v = new Date(viewDate); v.setHours(0, 0, 0, 0);
-  if (v >= t) return; // مفيش مستقبل
-  viewDate.setDate(viewDate.getDate() + 1); render();
-});
-$('#dateLabel').addEventListener('click', () => { viewDate = new Date(); render(); });
-
-/* حفظ بصري */
-let flashT;
-function flash() { const f = $('#flash'); f.style.transform = 'scaleX(1)'; clearTimeout(flashT); flashT = setTimeout(() => f.style.transform = 'scaleX(0)', 250); }
-
-/* ====================== تثبيت PWA ====================== */
-let deferred = null;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault(); deferred = e;
-  if (localStorage.getItem('yawmi_install_dismiss')) return;
-  $('#installToast').classList.add('show');
-});
-$('#installBtn').addEventListener('click', async () => {
-  $('#installToast').classList.remove('show');
-  if (deferred) { deferred.prompt(); await deferred.userChoice; deferred = null; }
-});
-$('#installX').addEventListener('click', () => {
-  $('#installToast').classList.remove('show');
-  localStorage.setItem('yawmi_install_dismiss', '1');
-});
-
-/* ====================== تشغيل ====================== */
-render();
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+function secCount(sec, v) {
+  const ids = sec.items.filter(it => (it.kind || 'check') === 'check' || it.group).map(it => it.id);
+  if (!ids.length) return '';
+  const d = ids.filter(id => v[id] === true).length;
+  return `<span class="cnt">${d} من ${ids.length}</span>`;
 }
+
+const CHK = '<span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>';
+
+function renderItem(sec, it, si, ii, v) {
+  const k = it.kind || 'check';
+  const del = S.edit ? `<button class="del" data-del="${si}:${ii}">✕</button>` : '';
+  if (k === 'rating') {
+    let dots = ''; for (let n = 1; n <= 10; n++) dots += `<div class="rdot ${v[it.id] === n ? 'on' : ''}" data-rate="${it.id}:${n}">${n}</div>`;
+    return `<div class="field"><label>${editLabel(it, si, ii)}</label><div class="rating">${dots}</div>${del}</div>`;
+  }
+  if (k === 'text' || k === 'time') {
+    const t = k === 'time' ? 'time' : 'text';
+    return `<div class="field"><label>${editLabel(it, si, ii)}</label><div class="frow"><input type="${t}" data-inp="${it.id}" value="${esc(v[it.id] || '')}">${del}</div></div>`;
+  }
+  // check
+  return `<div class="item ${v[it.id] === true ? 'done' : ''}" ${S.edit ? '' : `data-tog="${it.id}"`}>
+    ${S.edit ? '' : CHK}<div class="lbl"><span ${S.edit ? 'contenteditable class="ce"' : ''} data-lbledit="${si}:${ii}">${esc(it.label)}</span>${it.note && !S.edit ? `<small>${esc(it.note)}</small>` : ''}</div>${del}</div>`;
+}
+function editLabel(it, si, ii) {
+  return S.edit ? `<span contenteditable class="ce" data-lbledit="${si}:${ii}">${esc(it.label)}</span>` : esc(it.label);
+}
+
+function wireDay(key) {
+  const v = L.getDay(key);
+  const save = () => { L.setDay(key, v); flash(); schedulePush(key); };
+  $$('#screen [data-tog]').forEach(el => el.onclick = () => { const id = el.dataset.tog; v[id] = v[id] === true ? undefined : true; if (v[id] === undefined) delete v[id]; save(); renderDay(); });
+  $$('#screen [data-rate]').forEach(el => el.onclick = () => { const [id, n] = el.dataset.rate.split(':'); v[id] = v[id] === +n ? undefined : +n; if (v[id] === undefined) delete v[id]; save(); renderDay(); });
+  $$('#screen [data-inp]').forEach(el => el.oninput = () => { const id = el.dataset.inp; if (el.value) v[id] = el.value; else delete v[id]; save(); });
+  if (S.edit) wireEdit();
+}
+
+let pushT;
+function schedulePush(key) { clearTimeout(pushT); pushT = setTimeout(() => pushDay(key), 600); }
+
+// ===== وضع التعديل =====
+function wireEdit() {
+  $$('#screen [data-del]').forEach(el => el.onclick = () => {
+    const [si, ii] = el.dataset.del.split(':').map(Number);
+    S.template.sections[si].items.splice(ii, 1); saveTemplate(); renderDay();
+  });
+  $$('#screen [data-add]').forEach(el => el.onclick = () => {
+    const si = +el.dataset.add; const label = prompt('اسم المهمة الجديدة:'); if (!label) return;
+    S.template.sections[si].items.push({ id: uid(), label: label.trim() }); saveTemplate(); renderDay();
+  });
+  const addSec = $('#addSec');
+  if (addSec) addSec.onclick = () => { const title = prompt('اسم القسم الجديد:'); if (!title) return; S.template.sections.push({ id: uid(), title: title.trim(), items: [] }); saveTemplate(); renderDay(); };
+  $$('#screen [data-lbledit]').forEach(el => el.onblur = () => {
+    const [si, ii] = el.dataset.lbledit.split(':').map(Number);
+    const t = el.textContent.trim(); if (t) S.template.sections[si].items[ii].label = t; saveTemplate();
+  });
+  $$('#screen [data-secedit]').forEach(el => el.onblur = () => {
+    const si = +el.dataset.secedit; const t = el.textContent.trim(); if (t) S.template.sections[si].title = t; saveTemplate();
+  });
+}
+let tplT;
+function saveTemplate() {
+  localStorage.setItem('yawmi_template', JSON.stringify(S.template));
+  clearTimeout(tplT); tplT = setTimeout(() => api('template', 'POST', { template: S.template }).catch(() => {}), 700);
+  flash();
+}
+
+// ===== التقدّم =====
+function renderProgress() {
+  $('#hdr').innerHTML = `<div class="h-row"><div class="h-title">التقدّم</div></div>`;
+  const streak = computeStreak();
+  const vals = Object.values(S.progress);
+  const avg = vals.length ? Math.round(vals.reduce((a, b) => a + (+b), 0) / vals.length) : 0;
+  // تقويم الشهر الحالي
+  const now = new Date(); const y = now.getFullYear(), m = now.getMonth();
+  const first = new Date(y, m, 1); const days = new Date(y, m + 1, 0).getDate();
+  const startW = first.getDay();
+  let cells = '';
+  for (let i = 0; i < startW; i++) cells += `<div class="cal-cell empty"></div>`;
+  for (let d = 1; d <= days; d++) {
+    const k = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const p = S.progress[k] != null ? +S.progress[k] : (localStorage.getItem('yawmi_d_' + k) ? completionPct(k) : null);
+    const lvl = p == null ? 'n' : p >= 80 ? 'h' : p >= 50 ? 'm' : p > 0 ? 'l' : 'z';
+    cells += `<div class="cal-cell c-${lvl}" title="${p == null ? '' : p + '%'}">${d}</div>`;
+  }
+  const wd = ['أحد', 'إثن', 'ثلا', 'أرب', 'خمي', 'جمع', 'سبت'];
+  $('#screen').innerHTML = `
+    <div class="stats">
+      <div class="stat"><b>🔥 ${streak}</b><span>يوم متواصل</span></div>
+      <div class="stat"><b>${avg}%</b><span>متوسط الإنجاز</span></div>
+      <div class="stat"><b>${vals.filter(x => +x >= 50).length}</b><span>أيام ناجحة</span></div>
+    </div>
+    <div class="section"><div class="sec-head"><span>${esc(new Intl.DateTimeFormat('ar-EG', { month: 'long', year: 'numeric' }).format(now))}</span></div>
+      <div class="cal-wd">${wd.map(w => `<span>${w}</span>`).join('')}</div>
+      <div class="cal">${cells}</div>
+      <div class="legend"><span class="c-h"></span>عالي<span class="c-m"></span>متوسط<span class="c-l"></span>قليل<span class="c-z"></span>صفر</div>
+    </div>`;
+}
+
+// ===== أدوات/إعدادات =====
+function renderTools() {
+  $('#hdr').innerHTML = `<div class="h-row"><div class="h-title">أدوات وإعدادات</div></div>`;
+  $('#screen').innerHTML = `
+    <div class="section"><div class="sec-head"><span>قريباً</span></div>
+      <div class="soon-list">
+        <div>⏱️ مؤقّت بومودورو</div><div>📿 عدّاد التسبيح</div><div>🧭 اتجاه القبلة</div><div>🕌 مواعيد الصلاة والأذان</div>
+      </div></div>
+    <div class="section"><div class="sec-head"><span>الحساب</span></div>
+      <div class="acct">
+        <div class="acct-row"><span>الاسم</span><b>${esc(S.user?.name || '—')}</b></div>
+        <div class="acct-row"><span>الإيميل</span><b>${esc(S.user?.email || '')}</b></div>
+        <div class="acct-row"><span>المستوى المبدئي</span><b>${esc(SEEDS[S.level]?.name || S.level)}</b></div>
+        <button class="logout" id="logoutBtn">تسجيل الخروج</button>
+      </div></div>
+    <div class="credit">اللهم اجعله صدقة جارية 🤍</div>`;
+  $('#logoutBtn').onclick = () => { if (confirm('تسجيل الخروج؟ بياناتك محفوظة على السيرفر.')) logout(); };
+}
+
+function renderSoon(title, msg) {
+  $('#hdr').innerHTML = `<div class="h-row"><div class="h-title">${esc(title)}</div></div>`;
+  $('#screen').innerHTML = `<div class="soon"><div class="soon-ic">📖</div><p>${esc(msg)}</p></div>`;
+}
+
+// ===== تشغيل =====
+function boot() {
+  if (S.token) {
+    S.template = JSON.parse(localStorage.getItem('yawmi_template') || 'null');
+    S.settings = JSON.parse(localStorage.getItem('yawmi_settings') || 'null') || DEFAULT_SETTINGS;
+    if (S.template) { buildShell(); render(); }
+    api('bootstrap').then(d => { S.user = d.user; S.template = d.template; S.settings = d.settings || DEFAULT_SETTINGS; S.level = d.level;
+      localStorage.setItem('yawmi_template', JSON.stringify(S.template)); if (!document.querySelector('#tabs')) buildShell(); render(); syncFromServer(); })
+      .catch(e => { if (e.code === 401) logout(); });
+  } else {
+    renderAuth('login');
+  }
+}
+boot();
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

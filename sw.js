@@ -1,9 +1,10 @@
 // Service Worker — تخزين كل الملفات للعمل أوفلاين
-const CACHE = 'yawmi-v1';
+const CACHE = 'yawmi-v2';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
+  './data.js',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
@@ -24,9 +25,12 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// cache-first: يشتغل أوفلاين بالكامل
+// طلبات الـAPI: شبكة فقط (متتكاشش أبداً)
+// باقي الملفات: cache-first عشان تشتغل أوفلاين
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  if (url.pathname.includes('/api/')) { e.respondWith(fetch(e.request)); return; }
   e.respondWith(
     caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
       const copy = res.clone();
