@@ -60,6 +60,13 @@ try {
            'level' => $row['level_seed']]);
     }
 
+    // ===== تسجيل خروج (يلغي التوكن من السيرفر) =====
+    case 'logout': {
+      $t = bearer();
+      if ($t) db()->prepare('DELETE FROM sessions WHERE token = ?')->execute([$t]);
+      out(['ok' => true]);
+    }
+
     // ===== تحميل بيانات اليوزر =====
     case 'bootstrap': {
       $uid = requireUser();

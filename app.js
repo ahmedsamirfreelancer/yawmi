@@ -137,6 +137,7 @@ function onAuth(data) {
 }
 
 function logout() {
+  api('logout', 'POST').catch(() => {}); // يلغي التوكن من السيرفر (التوكن متقري قبل المسح)
   localStorage.removeItem('yawmi_token');
   S.token = ''; S.user = null;
   renderAuth('login');

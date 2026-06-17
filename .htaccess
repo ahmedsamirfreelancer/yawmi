@@ -1,0 +1,4 @@
+# منع كشف مجلد .git وأي ملفات مخفية + إعدادات الكاش
+RewriteEngine On
+RewriteRule (^|/)\.git(/|$) - [F,L]
+RewriteRule (^|/)\.(?!well-known)([^/]+)$ - [F,L]

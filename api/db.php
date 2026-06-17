@@ -2,8 +2,11 @@
 // اتصال قاعدة البيانات + أدوات مشتركة (PDO)
 declare(strict_types=1);
 date_default_timezone_set('UTC');
+ini_set('display_errors', '0');   // متعرضش أخطاء PHP للمستخدم (أمان)
+ini_set('log_errors', '1');
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: no-referrer');
 
 $cfgFile = __DIR__ . '/config.php';
 if (!file_exists($cfgFile)) { http_response_code(500); echo json_encode(['error' => 'config missing']); exit; }
