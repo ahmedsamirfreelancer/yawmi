@@ -5,4 +5,9 @@ return [
   'db'   => 'yawmi_db',
   'user' => 'yawmi_usr',
   'pass' => 'CHANGE_ME',
+
+  // مفاتيح Web Push — ولّدها بـ: php api/gen-vapid.php والصق الناتج هنا
+  // 'vapid_public'  => '...',
+  // 'vapid_subject' => 'mailto:admin@yawmi.digitalawy.com',
+  // 'vapid_private_pem' => '...',
 ];

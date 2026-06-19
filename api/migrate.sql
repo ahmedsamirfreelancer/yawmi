@@ -1,0 +1,58 @@
+-- ترقية قاعدة بيانات yawmi_db الموجودة (idempotent — آمن التكرار) — MariaDB 10.5+
+SET NAMES utf8mb4;
+
+-- استرجاع الباسوورد (سؤال أمان)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_q VARCHAR(190) DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_a_hash VARCHAR(255) DEFAULT '';
+
+-- انتهاء صلاحية الجلسات
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP NULL DEFAULT NULL;
+ALTER TABLE sessions ADD INDEX IF NOT EXISTS idx_exp (expires_at);
+
+-- توسيع task_id للبومودورو
+ALTER TABLE pomodoro_sessions MODIFY task_id VARCHAR(120) DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS quran_hifz (
+  user_id INT PRIMARY KEY,
+  data_json MEDIUMTEXT NOT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS quran_review (
+  user_id INT PRIMARY KEY,
+  data_json MEDIUMTEXT NOT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  endpoint VARCHAR(500) NOT NULL,
+  p256dh VARCHAR(255) NOT NULL,
+  auth VARCHAR(255) NOT NULL,
+  tz_offset INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_endpoint (endpoint(191)),
+  INDEX (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS push_log (
+  user_id INT NOT NULL,
+  day DATE NOT NULL,
+  tag VARCHAR(40) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, day, tag)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS throttle (
+  k VARCHAR(190) PRIMARY KEY,
+  cnt INT DEFAULT 0,
+  reset_at TIMESTAMP NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS password_resets (
+  token CHAR(64) PRIMARY KEY,
+  user_id INT NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  INDEX (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

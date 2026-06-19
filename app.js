@@ -32,7 +32,7 @@ async function api(route, method = 'GET', bodyObj = null) {
 
 // ===== تخزين محلي (local-first) =====
 const L = {
-  setDay(date, values) { S.days[date] = values; localStorage.setItem('yawmi_d_' + date, JSON.stringify(values)); },
+  setDay(date, values) { S.days[date] = values; try { localStorage.setItem('yawmi_d_' + date, JSON.stringify(values)); } catch (e) {} },
   getDay(date) {
     if (S.days[date]) return S.days[date];
     const raw = localStorage.getItem('yawmi_d_' + date);
@@ -79,6 +79,7 @@ function computeStreak() {
 // ===== شاشة الدخول =====
 function renderAuth(mode = 'login') {
   document.body.classList.add('auth-mode');
+  if (mode === 'forgot') return renderForgot();
   $('#root').innerHTML = `
     <div class="auth">
       <div class="auth-card">
@@ -98,14 +99,21 @@ function renderAuth(mode = 'login') {
             <button type="button" data-lvl="beginner" class="on">مبتدئ</button>
             <button type="button" data-lvl="intermediate">متوسط</button>
             <button type="button" data-lvl="advanced">متقدم</button>
+          </div>
+          <label class="lvl-label">سؤال استرجاع الباسوورد (لو نسيته):</label>
+          <div class="rec-fields">
+            <input name="recovery_q" placeholder="السؤال (مثلاً: اسم أول مدرسة؟)">
+            <input name="recovery_a" placeholder="الإجابة">
           </div>` : ''}
           <button class="primary" type="submit">${mode === 'register' ? 'أنشئ الحساب' : 'دخول'}</button>
+          ${mode === 'login' ? `<button type="button" class="link" id="forgotLink">نسيت الباسوورد؟</button>` : ''}
           <div class="err" id="authErr"></div>
         </form>
       </div>
     </div>`;
   $('#tLogin').onclick = () => renderAuth('login');
   $('#tReg').onclick = () => renderAuth('register');
+  const fl = $('#forgotLink'); if (fl) fl.onclick = () => renderAuth('forgot');
   let chosen = 'beginner';
   $$('.lvl button').forEach(b => b.onclick = () => { $$('.lvl button').forEach(x => x.classList.remove('on')); b.classList.add('on'); chosen = b.dataset.lvl; });
   $('#authForm').onsubmit = async e => {
@@ -117,11 +125,51 @@ function renderAuth(mode = 'login') {
       if (mode === 'register') {
         const seed = JSON.parse(JSON.stringify(SEEDS[chosen]));
         data = await api('register', 'POST', { email, password, name: f.name.value.trim(), level: chosen,
+          recovery_q: (f.recovery_q.value || '').trim(), recovery_a: (f.recovery_a.value || '').trim(),
           template: { motto: seed.motto, sections: seed.sections }, settings: DEFAULT_SETTINGS });
       } else {
         data = await api('login', 'POST', { email, password });
       }
       onAuth(data);
+    } catch (ex) { err.textContent = ex.message || 'في مشكلة، حاول تاني'; }
+  };
+}
+
+// ===== استرجاع الباسوورد بسؤال الأمان =====
+function renderForgot() {
+  $('#root').innerHTML = `
+    <div class="auth">
+      <div class="auth-card">
+        <div class="brand">استرجاع الباسوورد</div>
+        <div class="brand-sub">اكتب إيميلك ونجيب لك سؤال الأمان</div>
+        <form id="fForm">
+          <input name="email" type="email" placeholder="الإيميل" required>
+          <div id="qBox"></div>
+          <button class="primary" type="submit" id="fBtn">التالي</button>
+          <button type="button" class="link" id="backLogin">رجوع للدخول</button>
+          <div class="err" id="fErr"></div>
+        </form>
+      </div>
+    </div>`;
+  $('#backLogin').onclick = () => renderAuth('login');
+  let step = 1, theQ = '';
+  $('#fForm').onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target, err = $('#fErr'); err.textContent = '';
+    const email = f.email.value.trim();
+    try {
+      if (step === 1) {
+        const r = await api('forgot', 'POST', { email });
+        if (!r.question) { err.textContent = r.msg || 'مفيش سؤال أمان متسجّل للحساب ده'; return; }
+        theQ = r.question;
+        $('#qBox').innerHTML = `<label class="lvl-label">${esc(theQ)}</label>
+          <input name="answer" placeholder="إجابتك" required>
+          <input name="password" type="password" placeholder="باسوورد جديد (٦ حروف+)" required>`;
+        $('#fBtn').textContent = 'غيّر الباسوورد'; step = 2;
+      } else {
+        const data = await api('reset', 'POST', { email, answer: f.answer.value.trim(), password: f.password.value });
+        onAuth(data);
+      }
     } catch (ex) { err.textContent = ex.message || 'في مشكلة، حاول تاني'; }
   };
 }
@@ -133,7 +181,13 @@ function onAuth(data) {
   localStorage.setItem('yawmi_settings', JSON.stringify(S.settings));
   document.body.classList.remove('auth-mode');
   buildShell(); render();
-  syncFromServer(); initPrayer();
+  syncFromServer(); initPrayer(); loadQuran(); scheduleReminders(); maybeResubscribePush();
+}
+
+function maybeResubscribePush() {
+  if (S.settings && S.settings.pushEnabled && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then(() => enablePush()).catch(() => {});
+  }
 }
 
 function logout() {
@@ -177,7 +231,7 @@ function render() {
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
   if (S.tab === 'day') renderDay();
   else if (S.tab === 'progress') renderProgress();
-  else if (S.tab === 'quran') renderSoon('القرآن', 'الحفظ (الحصون الخمسة) والمراجعة (رسوخ) — جايين في التحديث الجاي إن شاء الله 📖');
+  else if (S.tab === 'quran') renderQuran();
   else if (S.tab === 'tools') renderTools();
 }
 
@@ -344,13 +398,12 @@ function renderProgress() {
     </div>`;
 }
 
-// ===== أدوات/إعدادات =====
-function renderTools() {
-  $('#hdr').innerHTML = `<div class="h-row"><div class="h-title">أدوات وإعدادات</div></div>`;
+// ===== أقسام الإعدادات (تُعرض داخل تبويب أدوات — انظر tools.js) =====
+function settingsSectionsHTML() {
   const p = S.settings.prayer || {}; const ad = S.settings.adhan || {};
   const located = p.lat != null;
   const methodOpts = Object.entries(Prayer.METHODS).map(([k, m]) => `<option value="${k}" ${p.method === k ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
-  $('#screen').innerHTML = `
+  return `
     <div class="section"><div class="sec-head"><span>🕌 مواعيد الصلاة والأذان</span></div>
       <div class="setbox">
         <div class="acct-row"><span>الموقع</span><b>${located ? esc(p.city || (p.lat + ', ' + p.lng)) : 'غير محدّد'}</b></div>
@@ -373,24 +426,43 @@ function renderTools() {
         </select>
         <button class="mini ghost" id="testAdhan">▶ جرّب الأذان</button>` : ''}
       </div></div>
-    <div class="section"><div class="sec-head"><span>قريباً</span></div>
-      <div class="soon-list"><div>⏱️ مؤقّت بومودورو</div><div>📿 عدّاد التسبيح</div><div>🧭 اتجاه القبلة</div><div>📖 الحفظ والمراجعة</div></div></div>
-    <div class="section"><div class="sec-head"><span>الحساب</span></div>
+    ${remindersHTML()}
+    <div class="section"><div class="sec-head"><span>🔐 الحساب والأمان</span></div>
       <div class="acct">
         <div class="acct-row"><span>الاسم</span><b>${esc(S.user?.name || '—')}</b></div>
         <div class="acct-row"><span>الإيميل</span><b>${esc(S.user?.email || '')}</b></div>
+        <div class="acct-row"><span>سؤال استرجاع الباسوورد</span><b>${S.user?.hasRecovery ? 'مفعّل ✓' : 'غير مضبوط'}</b></div>
+        <button class="mini ghost" id="setRecBtn" style="width:100%;margin-top:8px">${S.user?.hasRecovery ? 'تغيير سؤال الأمان' : 'اضبط سؤال استرجاع الباسوورد'}</button>
+        <button class="mini ghost" id="chgPassBtn" style="width:100%;margin-top:8px">تغيير الباسوورد</button>
         <button class="logout" id="logoutBtn">تسجيل الخروج</button>
       </div></div>
     <div class="credit">اللهم اجعله صدقة جارية 🤍</div>`;
-
-  $('#locBtn2').onclick = setupLocation;
+}
+function wireSettings() {
+  const lb = $('#locBtn2'); if (lb) lb.onclick = setupLocation;
   const mm = $('#mMethod'); if (mm) mm.onchange = () => { S.settings.prayer.method = mm.value; saveSettings(); Prayer.schedule(S.settings); renderTools(); };
   $$('[data-asr]').forEach(b => b.onclick = () => { S.settings.prayer.asr = b.dataset.asr; saveSettings(); Prayer.schedule(S.settings); renderTools(); });
   $$('[data-off]').forEach(i => i.onchange = () => { S.settings.prayer.offsets = S.settings.prayer.offsets || {}; S.settings.prayer.offsets[i.dataset.off] = parseInt(i.value) || 0; saveSettings(); Prayer.schedule(S.settings); });
   const ao = $('#adhanOn'); if (ao) ao.onchange = () => { S.settings.adhan.enabled = ao.checked; saveSettings(); if (ao.checked) { Prayer.askNotify(); Prayer.schedule(S.settings); } };
   const rc = $('#reciter'); if (rc) rc.onchange = () => { S.settings.adhan.reciter = rc.value; saveSettings(); };
   const ta = $('#testAdhan'); if (ta) ta.onclick = () => Prayer.playAdhan(S.settings);
+  wireReminders();
+  const sr = $('#setRecBtn'); if (sr) sr.onclick = setRecovery;
+  const cp = $('#chgPassBtn'); if (cp) cp.onclick = changePassword;
   $('#logoutBtn').onclick = () => { if (confirm('تسجيل الخروج؟ بياناتك محفوظة على السيرفر.')) logout(); };
+}
+
+async function setRecovery() {
+  const q = prompt('سؤال الأمان (مثلاً: اسم أول مدرسة؟):'); if (!q) return;
+  const a = prompt('الإجابة (افتكرها كويس — هتسترجع بيها الباسوورد):'); if (!a) return;
+  try { await api('set-recovery', 'POST', { recovery_q: q.trim(), recovery_a: a.trim() }); S.user.hasRecovery = true; alert('تم ضبط سؤال الأمان ✓'); renderTools(); }
+  catch (e) { alert('في مشكلة، حاول تاني'); }
+}
+async function changePassword() {
+  const oldp = prompt('الباسوورد الحالي:'); if (!oldp) return;
+  const np = prompt('الباسوورد الجديد (٦ حروف على الأقل):'); if (!np) return;
+  try { await api('change-password', 'POST', { old: oldp, password: np }); alert('تم تغيير الباسوورد ✓'); }
+  catch (e) { alert(e.message || 'الباسوورد الحالي غلط'); }
 }
 
 function renderSoon(title, msg) {
@@ -447,10 +519,11 @@ function boot() {
     S.template = JSON.parse(localStorage.getItem('yawmi_template') || 'null');
     S.settings = JSON.parse(localStorage.getItem('yawmi_settings') || 'null') || DEFAULT_SETTINGS;
     if (S.template) { buildShell(); render(); }
-    if (S.settings) initPrayer();
+    if (S.settings) { initPrayer(); scheduleReminders(); }
+    loadQuran();
     api('bootstrap').then(d => { S.user = d.user; S.template = d.template; S.settings = d.settings || DEFAULT_SETTINGS; S.level = d.level;
       localStorage.setItem('yawmi_template', JSON.stringify(S.template)); localStorage.setItem('yawmi_settings', JSON.stringify(S.settings));
-      if (!document.querySelector('#tabs')) buildShell(); render(); syncFromServer(); initPrayer(); })
+      if (!document.querySelector('#tabs')) buildShell(); render(); syncFromServer(); initPrayer(); scheduleReminders(); maybeResubscribePush(); })
       .catch(e => { if (e.code === 401) logout(); });
   } else {
     renderAuth('login');

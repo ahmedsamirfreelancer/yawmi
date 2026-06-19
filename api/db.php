@@ -46,15 +46,51 @@ function bearer(): ?string {
   return null;
 }
 
-// يرجّع user_id من التوكن أو يوقف بـ401
+// يرجّع user_id من التوكن أو يوقف بـ401 (مع انتهاء صلاحية + تمديد منزلق)
 function requireUser(): int {
   $t = bearer();
   if (!$t) fail('unauthorized', 401);
-  $st = db()->prepare('SELECT user_id FROM sessions WHERE token = ?');
+  $st = db()->prepare('SELECT user_id, expires_at FROM sessions WHERE token = ?');
   $st->execute([$t]);
   $row = $st->fetch();
   if (!$row) fail('unauthorized', 401);
+  // جلسة منتهية → تُحذف
+  if ($row['expires_at'] !== null && strtotime($row['expires_at']) < time()) {
+    db()->prepare('DELETE FROM sessions WHERE token = ?')->execute([$t]);
+    fail('انتهت الجلسة، سجّل الدخول من جديد', 401);
+  }
+  // تمديد منزلق: كل استخدام يطوّل الصلاحية ٦٠ يوم (تحديث خفيف مرة كل مرة)
+  db()->prepare('UPDATE sessions SET expires_at = (NOW() + INTERVAL 60 DAY) WHERE token = ?')->execute([$t]);
   return (int)$row['user_id'];
 }
 
 function newToken(): string { return bin2hex(random_bytes(32)); }
+
+// ينشئ جلسة جديدة بصلاحية ٦٠ يوم + ينضّف الجلسات المنتهية بشكل خفيف
+function createSession(int $uid): string {
+  $token = newToken();
+  db()->prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?,?, NOW() + INTERVAL 60 DAY)')->execute([$token, $uid]);
+  // تنظيف عرضي (1%) للجلسات المنتهية حتى ما يكبرش الجدول
+  if (random_int(1, 100) === 1) {
+    db()->exec('DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at < NOW()');
+  }
+  return $token;
+}
+
+function clientIp(): string {
+  return (string)($_SERVER['HTTP_CF_CONNECTING_IP'] ?? ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'));
+}
+
+// حد المحاولات: يرجّع false لو تخطّى الحد خلال النافذة الزمنية
+function throttleHit(string $key, int $max, int $windowSec): bool {
+  $pdo = db();
+  $pdo->prepare('INSERT INTO throttle (k, cnt, reset_at) VALUES (?, 1, (NOW() + INTERVAL ? SECOND))
+                 ON DUPLICATE KEY UPDATE
+                   cnt = IF(reset_at < NOW(), 1, cnt + 1),
+                   reset_at = IF(reset_at < NOW(), (NOW() + INTERVAL ? SECOND), reset_at)')
+      ->execute([$key, $windowSec, $windowSec]);
+  $st = $pdo->prepare('SELECT cnt FROM throttle WHERE k = ?');
+  $st->execute([$key]);
+  $cnt = (int)($st->fetchColumn() ?: 0);
+  return $cnt <= $max;
+}

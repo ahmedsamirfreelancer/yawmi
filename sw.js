@@ -1,11 +1,14 @@
-// Service Worker — تخزين كل الملفات للعمل أوفلاين
-const CACHE = 'yawmi-v4';
+// Service Worker — تخزين كل الملفات للعمل أوفلاين + استقبال تنبيهات الخلفية
+const CACHE = 'yawmi-v5';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
   './data.js',
   './prayer.js',
+  './quran.js',
+  './tools.js',
+  './push.js',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
@@ -46,4 +49,22 @@ self.addEventListener('fetch', (e) => {
       return res;
     }).catch(() => caches.match('./index.html')))
   );
+});
+
+// ===== تنبيهات الخلفية =====
+self.addEventListener('push', (e) => {
+  let d = { title: 'ورقة اليوم', body: '' };
+  try { d = e.data.json(); } catch (x) { try { d.body = e.data.text(); } catch (y) {} }
+  e.waitUntil(self.registration.showNotification(d.title || 'ورقة اليوم', {
+    body: d.body || '', icon: 'icon-192.png', badge: 'icon-192.png',
+    tag: d.tag || 'yawmi', dir: 'rtl', lang: 'ar', vibrate: [200, 100, 200]
+  }));
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cl) => {
+    for (const c of cl) { if ('focus' in c) return c.focus(); }
+    if (clients.openWindow) return clients.openWindow('./');
+  }));
 });
