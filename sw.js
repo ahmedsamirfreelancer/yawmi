@@ -1,5 +1,5 @@
 // Service Worker — تخزين كل الملفات للعمل أوفلاين + استقبال تنبيهات الخلفية
-const CACHE = 'yawmi-v8';
+const CACHE = 'yawmi-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -11,9 +11,9 @@ const ASSETS = [
   './adhkar.js',
   './push.js',
   './manifest.webmanifest',
-  './icon-192.png',
-  './icon-512.png',
-  './icon-maskable.png'
+  './icon-192-v2.png',
+  './icon-512-v2.png',
+  './icon-maskable-v2.png'
 ];
 
 self.addEventListener('install', (e) => {
