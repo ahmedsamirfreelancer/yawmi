@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ورقة اليوم">
 <title>ورقة اليوم</title>
+<link rel="stylesheet" href="fonts.css">
 <style>
   :root{
     --navy:#1F3A5F; --gold:#C49A2E; --light:#EFEDE6; --bg:#f5f4ef; --card:#fff;
@@ -19,7 +20,11 @@
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;padding:0}
-  body{font-family:"Segoe UI","Tahoma","Arial",sans-serif;background:var(--bg);color:var(--text)}
+  body{font-family:'Tajawal',"Segoe UI","Tahoma","Arial",sans-serif;background:var(--bg);color:var(--text)}
+  /* النصوص الدينية (الآيات والأذكار) بخط نسخ كلاسيكي */
+  .ad-text,.ayah-body{font-family:'Amiri','Tajawal',serif}
+  .ad-text{font-size:18.5px;line-height:2.2}
+  .ayah-body{font-size:19px;line-height:2.1}
   #root{min-height:100vh}
   #flash{position:fixed;top:0;left:0;right:0;height:3px;background:var(--gold);transform:scaleX(0);transform-origin:right;transition:.2s;z-index:60}
 

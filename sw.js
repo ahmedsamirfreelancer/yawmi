@@ -1,8 +1,17 @@
 // Service Worker — تخزين كل الملفات للعمل أوفلاين + استقبال تنبيهات الخلفية
-const CACHE = 'yawmi-v9';
+const CACHE = 'yawmi-v10';
 const ASSETS = [
   './',
   './index.html',
+  './fonts.css',
+  './fonts/tajawal-400-arabic.woff2',
+  './fonts/tajawal-400-latin.woff2',
+  './fonts/tajawal-500-arabic.woff2',
+  './fonts/tajawal-500-latin.woff2',
+  './fonts/tajawal-700-arabic.woff2',
+  './fonts/tajawal-700-latin.woff2',
+  './fonts/amiri-400-arabic.woff2',
+  './fonts/amiri-700-arabic.woff2',
   './app.js',
   './data.js',
   './prayer.js',
