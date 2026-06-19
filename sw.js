@@ -1,8 +1,9 @@
 // Service Worker — تخزين كل الملفات للعمل أوفلاين + استقبال تنبيهات الخلفية
-const CACHE = 'yawmi-v10';
+const CACHE = 'yawmi-v11';
 const ASSETS = [
   './',
   './index.html',
+  './manifest.v2.webmanifest',
   './fonts.css',
   './fonts/tajawal-400-arabic.woff2',
   './fonts/tajawal-400-latin.woff2',
@@ -45,7 +46,8 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   if (url.pathname.includes('/api/')) { e.respondWith(fetch(e.request)); return; } // API: شبكة فقط
-  const isHTML = e.request.mode === 'navigate' || (e.request.headers.get('accept') || '').includes('text/html');
+  // ملف الإعدادات (manifest): شبكة-أولاً عشان تحديث الأيقونة يوصل فوراً
+  const isHTML = e.request.mode === 'navigate' || (e.request.headers.get('accept') || '').includes('text/html') || url.pathname.endsWith('.webmanifest');
   if (isHTML) { // الصفحة: شبكة-أولاً (التحديثات تظهر فوراً) مع رجوع للكاش أوفلاين
     e.respondWith(fetch(e.request).then((res) => { const c = res.clone(); caches.open(CACHE).then((ca) => ca.put(e.request, c)); return res; })
       .catch(() => caches.match(e.request).then((h) => h || caches.match('./index.html'))));
