@@ -15,7 +15,7 @@ const SUNAN = g => [
   { id: 'sunan_isha', label: 'العشا', note: '٢ بعد', group: g },
 ];
 const GOALS = { id: 'goals', title: 'أهم ٣ حاجات النهاردة', items: [
-  { id: 'goal1', kind: 'text', label: '١' }, { id: 'goal2', kind: 'text', label: '٢' }, { id: 'goal3', kind: 'text', label: '٣' },
+  { id: 'goal1', kind: 'goal', label: '١' }, { id: 'goal2', kind: 'goal', label: '٢' }, { id: 'goal3', kind: 'goal', label: '٣' },
 ] };
 const SLEEP = extra => ({ id: 'sleep', title: 'قبل ما أنام', items: [
   { id: 'rating', kind: 'rating', label: 'تقييم يومك من ١٠' },

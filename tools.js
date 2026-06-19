@@ -33,42 +33,134 @@ function dailyAyahHTML() {
 }
 
 // ===== بومودورو =====
-let pomoTick = null;
+let pomoTick = null, pomoByTask = [];
 function pomoState() { try { return JSON.parse(localStorage.getItem('yawmi_pomo') || 'null'); } catch (e) { return null; } }
 function pomoSave(s) { if (s) localStorage.setItem('yawmi_pomo', JSON.stringify(s)); else localStorage.removeItem('yawmi_pomo'); }
+function pomoTask() { return localStorage.getItem('yawmi_pomo_task') || ''; }
+function pomoSetTask(t) { if (t) localStorage.setItem('yawmi_pomo_task', t); else localStorage.removeItem('yawmi_pomo_task'); }
+
+// بناء قائمة المهام (من اليوم + القرآن)
+function pomoTaskOptions(sel) {
+  const v = L.getDay(todayKey());
+  const day = [];
+  if (S.template && S.template.sections) S.template.sections.forEach(s => s.items.forEach(it => {
+    const k = it.kind || 'check';
+    if (k === 'goal') { const t = v[it.id + '_t']; if (t && !day.includes(t)) day.push(t); }
+    else if (k === 'check' || it.group) { const t = (it.group ? it.group + ': ' : '') + it.label; if (!day.includes(t)) day.push(t); }
+  }));
+  const q = [];
+  if (S.hifz && S.hifz.enabled) { q.push('حفظ القرآن (الحصون)'); q.push('مراجعة الحفظ'); }
+  if (S.review && S.review.started) q.push('مراجعة رسوخ');
+  q.push('تلاوة وتدبّر');
+  const opt = (val, lbl) => `<option value="${esc(val)}" ${sel === val ? 'selected' : ''}>${esc(lbl)}</option>`;
+  let html = `<option value="" ${!sel ? 'selected' : ''}>— من غير مهمة —</option>`;
+  if (day.length) html += `<optgroup label="مهام اليوم">${day.map(t => opt(t, t)).join('')}</optgroup>`;
+  html += `<optgroup label="القرآن">${q.map(t => opt(t, t)).join('')}</optgroup>`;
+  const custom = sel && sel !== '__custom__' && !day.includes(sel) && !q.includes(sel);
+  html += `<option value="__custom__" ${(sel === '__custom__' || custom) ? 'selected' : ''}>✏️ أخرى (اكتب بنفسك)…</option>`;
+  return html;
+}
+
 function renderPomodoro() {
   const cfg = (S.settings && S.settings.pomodoro) || { focus: 25, brk: 5, long: 15 };
+  cfg.focus = cfg.focus || 25; cfg.brk = cfg.brk || 5; cfg.long = cfg.long || 15;
   let st = pomoState();
+  const sel = pomoTask();
+  const isCustom = sel && pomoTaskOptions(sel).indexOf('value="' + esc(sel) + '"') === -1;
   const phaseLbl = { focus: 'تركيز', brk: 'راحة', long: 'راحة طويلة' };
   $('#screen').innerHTML = `
     <div class="section"><div class="sec-head"><span>⏱️ مؤقّت بومودورو</span><span class="cnt" id="pomoTotal">—</span></div>
       <div class="pomo">
         <div class="pomo-phase" id="pPhase">${st ? phaseLbl[st.phase] : 'جاهز'}</div>
         <div class="pomo-time" id="pTime">${String(cfg.focus).padStart(2, '0')}:00</div>
-        <input id="pTask" class="pomo-task" placeholder="على إيه بتركّز؟ (قرآن / مذاكرة...)" value="${esc(st && st.task || '')}">
+        <div class="pomo-cur" id="pCur"></div>
         <div class="pomo-btns">
           <button class="primary" id="pStart">${st && st.running ? '⏸ إيقاف مؤقت' : '▶ ابدأ'}</button>
           <button class="mini ghost" id="pReset">إعادة</button>
         </div>
+      </div></div>
+    <div class="section"><div class="sec-head"><span>على إيه بتركّز؟</span></div>
+      <div class="setbox">
+        <select id="pTaskSel">${pomoTaskOptions(isCustom ? '__custom__' : sel)}</select>
+        <input id="pTaskCustom" class="pomo-task" placeholder="اكتب المهمة" value="${isCustom ? esc(sel) : ''}" style="display:${isCustom ? 'block' : 'none'};margin-top:10px">
+      </div></div>
+    <div class="section"><div class="sec-head"><span>المدة (دقيقة)</span></div>
+      <div class="setbox">
+        <label class="setlbl">التركيز</label>
+        <div class="stepper"><button data-pd="focus:-5">−</button><b id="pdFocus">${cfg.focus}</b><button data-pd="focus:5">+</button></div>
+        <div class="seg sm" style="margin-top:8px">${[15, 25, 45].map(n => `<button type="button" data-pq="${n}" class="${cfg.focus === n ? 'on' : ''}">${n}</button>`).join('')}</div>
+        <div class="offs" style="margin-top:12px">
+          <div class="off"><span>راحة</span><div class="ministep"><button data-pd="brk:-1">−</button><b id="pdBrk">${cfg.brk}</b><button data-pd="brk:1">+</button></div></div>
+          <div class="off"><span>راحة طويلة</span><div class="ministep"><button data-pd="long:-5">−</button><b id="pdLong">${cfg.long}</b><button data-pd="long:5">+</button></div></div>
+        </div>
       </div></div>`;
-  api('pomodoro').then(d => { const e = $('#pomoTotal'); if (e) e.textContent = `النهاردة ${d.total || 0} دقيقة`; }).catch(() => {});
+
+  const refreshCounts = () => {
+    api('pomodoro').then(d => {
+      pomoByTask = d.byTask || [];
+      const e = $('#pomoTotal'); if (e) e.textContent = `النهاردة ${d.cnt || 0} 🍅 (${d.total || 0}د)`;
+      drawCur();
+    }).catch(() => {});
+  };
+  const drawCur = () => {
+    const cur = $('#pCur'); if (!cur) return;
+    const t = currentTask();
+    if (!t) { cur.textContent = ''; return; }
+    const row = pomoByTask.find(x => x.task === t);
+    cur.innerHTML = `على «${esc(t)}» — <b>${row ? row.cnt : 0}</b> بومودورو النهاردة`;
+  };
+  const currentTask = () => {
+    const selv = $('#pTaskSel') ? $('#pTaskSel').value : sel;
+    if (selv === '__custom__') return ($('#pTaskCustom') && $('#pTaskCustom').value.trim()) || '';
+    return selv || '';
+  };
+
   const draw = () => {
     const s = pomoState(); const tEl = $('#pTime'), phEl = $('#pPhase');
     if (!tEl) return;
     if (!s) { tEl.textContent = String(cfg.focus).padStart(2, '0') + ':00'; if (phEl) phEl.textContent = 'جاهز'; return; }
-    const dur = (s.phase === 'focus' ? cfg.focus : s.phase === 'brk' ? cfg.brk : cfg.long) * 60;
     let rem = s.running ? Math.max(0, Math.round((s.endTs - Date.now()) / 1000)) : s.remain;
     if (phEl) phEl.textContent = phaseLbl[s.phase];
     tEl.textContent = String(Math.floor(rem / 60)).padStart(2, '0') + ':' + String(rem % 60).padStart(2, '0');
     if (s.running && rem <= 0) pomoFinish();
   };
   clearInterval(pomoTick); pomoTick = setInterval(draw, 500); draw();
+  refreshCounts();
+
+  // اختيار المهمة
+  $('#pTaskSel').onchange = () => {
+    const val = $('#pTaskSel').value;
+    $('#pTaskCustom').style.display = val === '__custom__' ? 'block' : 'none';
+    if (val !== '__custom__') { pomoSetTask(val); drawCur(); }
+  };
+  $('#pTaskCustom').oninput = () => { pomoSetTask($('#pTaskCustom').value.trim()); drawCur(); };
+
+  // المدة
+  const saveCfg = () => { S.settings.pomodoro = cfg; saveSettings(); };
+  $$('#screen [data-pd]').forEach(b => b.onclick = () => {
+    const [k, d] = b.dataset.pd.split(':');
+    const min = k === 'focus' ? 5 : k === 'brk' ? 1 : 5, max = k === 'focus' ? 90 : k === 'brk' ? 30 : 45;
+    cfg[k] = Math.max(min, Math.min(max, (cfg[k] || 0) + (+d)));
+    saveCfg();
+    const ids = { focus: 'pdFocus', brk: 'pdBrk', long: 'pdLong' };
+    const el = document.getElementById(ids[k]); if (el) el.textContent = cfg[k];
+    if (k === 'focus') { $$('[data-pq]').forEach(x => x.classList.toggle('on', +x.dataset.pq === cfg.focus)); const s = pomoState(); if (!s || !s.running) { $('#pTime').textContent = String(cfg.focus).padStart(2, '0') + ':00'; } }
+  });
+  $$('#screen [data-pq]').forEach(b => b.onclick = () => {
+    cfg.focus = +b.dataset.pq; saveCfg();
+    $('#pdFocus').textContent = cfg.focus; $$('[data-pq]').forEach(x => x.classList.toggle('on', x === b));
+    const s = pomoState(); if (!s || !s.running) $('#pTime').textContent = String(cfg.focus).padStart(2, '0') + ':00';
+  });
+
   $('#pStart').onclick = () => {
     let s = pomoState();
     if (!s) s = { phase: 'focus', running: false, remain: cfg.focus * 60, cycle: 0, task: '' };
-    s.task = $('#pTask').value.trim();
+    s.task = currentTask();
     if (s.running) { s.remain = Math.max(0, Math.round((s.endTs - Date.now()) / 1000)); s.running = false; }
-    else { s.endTs = Date.now() + (s.remain || (cfg.focus * 60)) * 1000; s.running = true; Prayer.askNotify(); }
+    else {
+      if (!s.remain || s.phase === 'focus' && s.remain > cfg.focus * 60) s.remain = cfg.focus * 60;
+      s.endTs = Date.now() + (s.remain || cfg.focus * 60) * 1000; s.running = true; Prayer.askNotify();
+    }
     pomoSave(s); renderPomodoro();
   };
   $('#pReset').onclick = () => { pomoSave(null); renderPomodoro(); };

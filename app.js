@@ -63,10 +63,23 @@ function boolItems(tpl) {
   return ids;
 }
 function completionPct(date) {
-  const ids = boolItems(); if (!ids.length) return 0;
-  const v = L.getDay(date); let done = 0;
-  ids.forEach(id => { if (v[id] === true) done++; });
-  return Math.round(done / ids.length * 100);
+  if (!S.template || !S.template.sections) return 0;
+  const v = L.getDay(date); let total = 0, done = 0;
+  S.template.sections.forEach(s => s.items.forEach(it => {
+    const k = it.kind || 'check';
+    if (k === 'check' || it.group) { total++; if (v[it.id] === true) done++; }
+    else if (k === 'goal' && v[it.id + '_t']) { total++; if (v[it.id] === true) done++; } // الهدف يتحسب لو مكتوب بس
+  }));
+  return total ? Math.round(done / total * 100) : 0;
+}
+// ترقية قوالب المستخدمين القدامى: أهداف اليوم من text → goal (مرة واحدة)
+function normalizeTemplate() {
+  if (!S.template || !S.template.sections) return;
+  let changed = false;
+  S.template.sections.forEach(sec => {
+    if (sec.id === 'goals') sec.items.forEach(it => { if ((it.kind || '') === 'text') { it.kind = 'goal'; changed = true; } });
+  });
+  if (changed) saveTemplate();
 }
 function computeStreak() {
   let d = new Date(), s = 0;
@@ -239,6 +252,7 @@ function flash() { const f = $('#flash'); if (!f) return; f.style.transform = 's
 
 // ===== شاشة اليوم =====
 function renderDay() {
+  normalizeTemplate();
   const key = dayKey(S.view);
   let g = key, h = '';
   try { g = new Intl.DateTimeFormat('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' }).format(S.view); } catch (e) {}
@@ -290,7 +304,8 @@ function renderDay() {
       html += renderItem(sec, it, si, i, v);
       i++;
     }
-    if (S.edit) html += `<button class="add-item" data-add="${si}">+ مهمة</button>`;
+    if (sec.id === 'goals') html += `<button class="add-item" data-addgoal="${si}">+ أضف هدف</button>`;
+    else if (S.edit) html += `<button class="add-item" data-add="${si}">+ مهمة</button>`;
     html += `</div></div>`;
   });
   if (S.edit) html += `<button class="add-section" id="addSec">+ قسم جديد</button>`;
@@ -300,17 +315,31 @@ function renderDay() {
 }
 
 function secCount(sec, v) {
-  const ids = sec.items.filter(it => (it.kind || 'check') === 'check' || it.group).map(it => it.id);
-  if (!ids.length) return '';
-  const d = ids.filter(id => v[id] === true).length;
-  return `<span class="cnt">${d} من ${ids.length}</span>`;
+  let total = 0, d = 0;
+  sec.items.forEach(it => {
+    const k = it.kind || 'check';
+    if (k === 'check' || it.group) { total++; if (v[it.id] === true) d++; }
+    else if (k === 'goal' && v[it.id + '_t']) { total++; if (v[it.id] === true) d++; }
+  });
+  if (!total) return '';
+  return `<span class="cnt">${d} من ${total}</span>`;
 }
 
-const CHK = '<span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>';
+const CHK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>';
+const CHK = `<span class="check">${CHK_SVG}</span>`;
 
 function renderItem(sec, it, si, ii, v) {
   const k = it.kind || 'check';
   const del = S.edit ? `<button class="del" data-del="${si}:${ii}">✕</button>` : '';
+  if (k === 'goal') {
+    if (S.edit) {
+      return `<div class="field"><label>${editLabel(it, si, ii)}</label><div class="frow"><input type="text" data-goaltext="${it.id}" value="${esc(v[it.id + '_t'] || '')}">${del}</div></div>`;
+    }
+    const done = v[it.id] === true;
+    return `<div class="goal ${done ? 'done' : ''}">
+      <span class="check" data-tog="${it.id}">${CHK_SVG}</span>
+      <input class="goal-inp" data-goaltext="${it.id}" placeholder="هدف ${esc(it.label)}" value="${esc(v[it.id + '_t'] || '')}"></div>`;
+  }
   if (k === 'rating') {
     let dots = ''; for (let n = 1; n <= 10; n++) dots += `<div class="rdot ${v[it.id] === n ? 'on' : ''}" data-rate="${it.id}:${n}">${n}</div>`;
     return `<div class="field"><label>${editLabel(it, si, ii)}</label><div class="rating">${dots}</div>${del}</div>`;
@@ -333,6 +362,12 @@ function wireDay(key) {
   $$('#screen [data-tog]').forEach(el => el.onclick = () => { const id = el.dataset.tog; v[id] = v[id] === true ? undefined : true; if (v[id] === undefined) delete v[id]; save(); renderDay(); });
   $$('#screen [data-rate]').forEach(el => el.onclick = () => { const [id, n] = el.dataset.rate.split(':'); v[id] = v[id] === +n ? undefined : +n; if (v[id] === undefined) delete v[id]; save(); renderDay(); });
   $$('#screen [data-inp]').forEach(el => el.oninput = () => { const id = el.dataset.inp; if (el.value) v[id] = el.value; else delete v[id]; save(); });
+  $$('#screen [data-goaltext]').forEach(el => el.oninput = () => { const k = el.dataset.goaltext + '_t'; if (el.value) v[k] = el.value; else delete v[k]; save(); });
+  $$('#screen [data-addgoal]').forEach(el => el.onclick = () => {
+    const si = +el.dataset.addgoal;
+    S.template.sections[si].items.push({ id: uid(), kind: 'goal', label: String(S.template.sections[si].items.length + 1) });
+    saveTemplate(); renderDay();
+  });
   if (S.edit) wireEdit();
 }
 
@@ -407,15 +442,20 @@ function settingsSectionsHTML() {
     <div class="section"><div class="sec-head"><span>🕌 مواعيد الصلاة والأذان</span></div>
       <div class="setbox">
         <div class="acct-row"><span>الموقع</span><b>${located ? esc(p.city || (p.lat + ', ' + p.lng)) : 'غير محدّد'}</b></div>
-        <button class="mini" id="locBtn2">${located ? 'تغيير الموقع' : 'حدّد موقعي'}</button>
+        <button class="mini" id="locBtn2">${located ? 'تحديد تلقائي بالـGPS' : 'حدّد موقعي تلقائياً'}</button>
+        <label class="setlbl">أو اختر مدينتك من القائمة</label>
+        <select id="citySel">
+          <option value="">📍 تحديد تلقائي (GPS)</option>
+          ${Object.keys(Prayer.CITIES).map(c => `<option value="${esc(c)}" ${p.city === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+        </select>
         ${located ? `
         <label class="setlbl">طريقة الحساب</label>
         <select id="mMethod">${methodOpts}</select>
         <label class="setlbl">حساب العصر</label>
         <div class="seg sm"><button type="button" data-asr="Standard" class="${p.asr !== 'Hanafi' ? 'on' : ''}">الجمهور</button><button type="button" data-asr="Hanafi" class="${p.asr === 'Hanafi' ? 'on' : ''}">الحنفي</button></div>
-        <label class="setlbl">تعديل بالدقائق (±)</label>
-        <div class="offs">
-          ${['fajr:الفجر', 'dhuhr:الظهر', 'asr:العصر', 'maghrib:المغرب', 'isha:العشاء'].map(o => { const [k, l] = o.split(':'); return `<div class="off"><span>${l}</span><input type="number" data-off="${k}" value="${(p.offsets && p.offsets[k]) || 0}"></div>`; }).join('')}
+        <label class="setlbl">تعديل بالدقائق (±) — لو الأذان عندك بيتأخّر أو يتقدّم</label>
+        <div>
+          ${['fajr:الفجر', 'dhuhr:الظهر', 'asr:العصر', 'maghrib:المغرب', 'isha:العشاء'].map(o => { const [k, l] = o.split(':'); const val = (p.offsets && p.offsets[k]) || 0; return `<div class="rem-row"><span>${l}</span><div class="ministep"><button data-offd="${k}:-1">−</button><b id="off_${k}">${val}</b><button data-offd="${k}:1">+</button></div></div>`; }).join('')}
         </div>
         <div class="acct-row"><span>الأذان وقت الصلاة</span><label class="sw"><input type="checkbox" id="adhanOn" ${ad.enabled ? 'checked' : ''}><i></i></label></div>
         <label class="setlbl">صوت الأذان</label>
@@ -442,7 +482,21 @@ function wireSettings() {
   const lb = $('#locBtn2'); if (lb) lb.onclick = setupLocation;
   const mm = $('#mMethod'); if (mm) mm.onchange = () => { S.settings.prayer.method = mm.value; saveSettings(); Prayer.schedule(S.settings); renderTools(); };
   $$('[data-asr]').forEach(b => b.onclick = () => { S.settings.prayer.asr = b.dataset.asr; saveSettings(); Prayer.schedule(S.settings); renderTools(); });
-  $$('[data-off]').forEach(i => i.onchange = () => { S.settings.prayer.offsets = S.settings.prayer.offsets || {}; S.settings.prayer.offsets[i.dataset.off] = parseInt(i.value) || 0; saveSettings(); Prayer.schedule(S.settings); });
+  $$('[data-offd]').forEach(b => b.onclick = () => {
+    const [k, d] = b.dataset.offd.split(':');
+    S.settings.prayer.offsets = S.settings.prayer.offsets || {};
+    const val = Math.max(-30, Math.min(30, (S.settings.prayer.offsets[k] || 0) + (+d)));
+    S.settings.prayer.offsets[k] = val;
+    const el = document.getElementById('off_' + k); if (el) el.textContent = val;
+    saveSettings(); Prayer.schedule(S.settings);
+  });
+  const cs = $('#citySel'); if (cs) cs.onchange = () => {
+    const c = cs.value;
+    if (!c) { setupLocation(); return; }
+    const co = Prayer.CITIES[c]; if (!co) return;
+    S.settings.prayer.lat = co[0]; S.settings.prayer.lng = co[1]; S.settings.prayer.city = c;
+    saveSettings(); Prayer.askNotify(); Prayer.schedule(S.settings); render();
+  };
   const ao = $('#adhanOn'); if (ao) ao.onchange = () => { S.settings.adhan.enabled = ao.checked; saveSettings(); if (ao.checked) { Prayer.askNotify(); Prayer.schedule(S.settings); } };
   const rc = $('#reciter'); if (rc) rc.onchange = () => { S.settings.adhan.reciter = rc.value; saveSettings(); };
   const ta = $('#testAdhan'); if (ta) ta.onclick = () => Prayer.playAdhan(S.settings);

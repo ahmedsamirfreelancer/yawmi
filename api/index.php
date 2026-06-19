@@ -253,9 +253,12 @@ try {
     case 'pomodoro': {
       $uid = requireUser();
       if ($method === 'GET') {
-        $st = db()->prepare('SELECT COALESCE(SUM(minutes),0) total, COUNT(*) cnt FROM pomodoro_sessions WHERE user_id = ? AND day = CURDATE()');
+        $st = db()->prepare('SELECT task_id, COUNT(*) cnt, COALESCE(SUM(minutes),0) minutes FROM pomodoro_sessions WHERE user_id = ? AND day = CURDATE() GROUP BY task_id');
         $st->execute([$uid]);
-        out($st->fetch() ?: ['total' => 0, 'cnt' => 0]);
+        $rows = $st->fetchAll();
+        $total = 0; $cnt = 0; $byTask = [];
+        foreach ($rows as $r) { $total += (int)$r['minutes']; $cnt += (int)$r['cnt']; $byTask[] = ['task' => $r['task_id'], 'cnt' => (int)$r['cnt'], 'minutes' => (int)$r['minutes']]; }
+        out(['total' => $total, 'cnt' => $cnt, 'byTask' => $byTask]);
       } else {
         $b = body();
         $task = mb_substr(trim((string)($b['task'] ?? '')), 0, 120);

@@ -193,6 +193,24 @@
   .rem-row input{border:1.5px solid var(--line);border-radius:9px;padding:7px 10px;font-family:inherit;font-size:14px}
   .link{background:none;border:0;color:var(--gold);font-size:13px;cursor:pointer;font-family:inherit;text-decoration:underline;padding:4px}
   .rec-fields{display:flex;flex-direction:column;gap:10px}
+
+  /* ===== أهداف اليوم القابلة للضغط ===== */
+  .goal{display:flex;align-items:center;gap:11px;padding:11px 10px;border-bottom:1px solid var(--line)}
+  .goal:last-child{border-bottom:0}
+  .goal .check{cursor:pointer}
+  .goal.done .check{background:var(--ok);border-color:var(--ok)}
+  .goal.done .check svg{opacity:1}
+  .goal-inp{flex:1;border:0;background:transparent;font-family:inherit;font-size:14.5px;padding:4px 2px;color:var(--text);border-bottom:1px dashed transparent}
+  .goal-inp:focus{outline:0;border-bottom-color:var(--gold)}
+  .goal.done .goal-inp{text-decoration:line-through;text-decoration-color:#bbb;color:var(--muted)}
+  .add-item[data-addgoal]{border-color:var(--gold);color:var(--navy)}
+  /* ===== ستيبر صغير (دقائق الأذان/البومودورو) ===== */
+  .ministep{display:inline-flex;align-items:center;gap:8px}
+  .ministep button{width:30px;height:30px;border-radius:8px;border:0;background:var(--navy);color:#fff;font-size:18px;line-height:1;cursor:pointer;font-family:inherit}
+  .ministep b{min-width:26px;text-align:center;font-size:15px;color:var(--navy)}
+  .off .ministep{justify-content:center}
+  .pomo-cur{font-size:13px;color:var(--gold);font-weight:700;margin-bottom:12px;min-height:18px}
+  #pTaskSel{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:10px;font-size:14px;font-family:inherit;background:#fff}
 </style>
 </head>
 <body>
