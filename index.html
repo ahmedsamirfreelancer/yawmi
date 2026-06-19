@@ -175,6 +175,26 @@
   .tcont b,.tlast b{color:var(--gold)}
   .tlog{font-size:12.5px;color:var(--muted);padding:3px 0}
 
+  /* ===== مودال/توست داخل التطبيق ===== */
+  .ui-ov{position:fixed;inset:0;z-index:100;background:rgba(15,25,40,.55);display:flex;align-items:center;justify-content:center;padding:22px;opacity:0;transition:.2s}
+  .ui-ov.show{opacity:1}
+  .ui-card{background:#fff;border-radius:16px;padding:20px 18px;width:100%;max-width:360px;box-shadow:0 16px 50px rgba(0,0,0,.3);transform:translateY(10px);transition:.2s}
+  .ui-ov.show .ui-card{transform:none}
+  .ui-title{font-size:17px;font-weight:800;color:var(--navy);margin-bottom:8px}
+  .ui-msg{font-size:15px;color:var(--text);line-height:1.8;margin-bottom:4px}
+  .ui-msg.sm{font-size:13px;color:var(--muted);margin-bottom:8px;line-height:1.7}
+  .ui-lbl{display:block;font-size:13px;color:var(--navy);font-weight:700;margin:10px 0 5px}
+  .ui-inp{width:100%;border:1.5px solid var(--line);border-radius:11px;padding:12px;font-size:15px;font-family:inherit;margin-bottom:2px}
+  .ui-inp:focus{outline:0;border-color:var(--gold)}
+  .ui-inp.err{border-color:#c0392b}
+  .ui-btns{display:flex;gap:9px;margin-top:16px}
+  .ui-btn{flex:1;border:0;border-radius:11px;padding:12px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;background:var(--light);color:var(--navy)}
+  .ui-btn.primary{background:var(--gold);color:#1a2230}
+  .ui-btn.danger{background:#fbeaea;color:#c0392b}
+  #uiToastHost{position:fixed;left:0;right:0;bottom:calc(74px + env(safe-area-inset-bottom));z-index:120;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;padding:0 20px}
+  .ui-toast{background:rgba(31,58,95,.96);color:#fff;font-size:14px;font-weight:600;padding:11px 18px;border-radius:12px;max-width:340px;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.3);opacity:0;transform:translateY(12px);transition:.25s}
+  .ui-toast.show{opacity:1;transform:none}
+
   /* ===== أدوات ===== */
   .tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:13px}
   .ttile{background:var(--card);border:0;border-radius:14px;padding:16px 6px;box-shadow:var(--shadow);cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:var(--navy);display:flex;flex-direction:column;align-items:center;gap:7px}
@@ -265,6 +285,7 @@
 </head>
 <body>
 <div id="root"></div>
+<script src="ui.js"></script>
 <script src="data.js"></script>
 <script src="prayer.js"></script>
 <script src="quran.js"></script>

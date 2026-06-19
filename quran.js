@@ -211,12 +211,12 @@ function renderHusun() {
     L.setDay(key, v); flash(); schedulePush(key); renderHusun();
   });
   $('#advBtn').onclick = () => {
-    if (h.currentPage >= MUSHAF_PAGES) { alert('ما شاء الله، خلّصت المصحف! 🤍'); return; }
+    if (h.currentPage >= MUSHAF_PAGES) { uiToast('ما شاء الله، خلّصت المصحف! 🤍'); return; }
     h.currentPage = Math.min(MUSHAF_PAGES, h.currentPage + (h.rate || 1));
     h.lastAdvance = key; v['q_h_new'] = true; L.setDay(key, v); schedulePush(key); saveHifz(); renderHusun();
   };
   $$('#screen [data-adj]').forEach(b => b.onclick = () => { h.currentPage = Math.max(h.startPage, Math.min(MUSHAF_PAGES, h.currentPage + (+b.dataset.adj))); saveHifz(); renderHusun(); });
-  $('#resetHusun').onclick = () => { if (confirm('إعادة ضبط إعداد الحصون؟ (تقدمك في الصفحة هيتساب)')) { S.hifz.enabled = false; saveHifz(); renderHusun(); } };
+  $('#resetHusun').onclick = async () => { if (await uiConfirm('إعادة ضبط إعداد الحصون؟ (تقدمك في الصفحة هيتساب)', { okText: 'إعادة ضبط', danger: true })) { S.hifz.enabled = false; saveHifz(); renderHusun(); } };
 }
 
 // ===== شاشة رسوخ =====
@@ -269,8 +269,8 @@ function renderRusukh() {
     v[k] = v[k] === true ? undefined : true; if (v[k] === undefined) delete v[k];
     L.setDay(key, v); flash(); schedulePush(key); renderRusukh();
   });
-  const pb = $('#promoteBtn'); if (pb) pb.onclick = () => {
-    if (!confirm(`ترقية جزء ${plan.tadbeet} للمتقن؟`)) return;
+  const pb = $('#promoteBtn'); if (pb) pb.onclick = async () => {
+    if (!(await uiConfirm(`ترقية جزء ${plan.tadbeet} للمتقن؟`, { okText: 'ترقية' }))) return;
     rev.juz[plan.tadbeet] = 'mastered'; delete v['q_r_tadbeet']; L.setDay(key, v); saveReview(); renderRusukh();
   };
   const th = $('#toHusunBtn'); if (th) th.onclick = () => {

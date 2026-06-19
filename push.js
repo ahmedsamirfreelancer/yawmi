@@ -11,12 +11,12 @@ function urlB64ToUint8(base64) {
 
 async function enablePush() {
   try {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) { alert('متصفحك مش بيدعم تنبيهات الخلفية'); return false; }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) { uiToast('متصفحك مش بيدعم تنبيهات الخلفية'); return false; }
     const perm = await Notification.requestPermission();
-    if (perm !== 'granted') { alert('لازم تسمح بالتنبيهات عشان توصلك'); return false; }
+    if (perm !== 'granted') { uiToast('لازم تسمح بالتنبيهات عشان توصلك'); return false; }
     const reg = await navigator.serviceWorker.ready;
     const vk = await api('vapid');
-    if (!vk.publicKey) { alert('تنبيهات الخلفية لسه مش متظبطة على السيرفر'); return false; }
+    if (!vk.publicKey) { uiToast('تنبيهات الخلفية لسه مش متظبطة على السيرفر'); return false; }
     let sub = await reg.pushManager.getSubscription();
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(vk.publicKey) });
     const j = sub.toJSON();

@@ -319,8 +319,8 @@ function wireReminders() {
     try {
       if (!(S.settings && S.settings.pushEnabled)) { const ok = await enablePush(); S.settings.pushEnabled = ok; saveSettings(); if (!ok) throw new Error('لازم تسمح بالتنبيهات'); }
       const r = await api('push-test', 'POST', {});
-      alert(r.sent > 0 ? 'تم إرسال إشعار تجربة ✓ المفروض يوصلك خلال ثواني' : 'مفيش إشعار اتبعت — اتأكد إنك سامح بالإشعارات ومفعّل تنبيهات الخلفية');
-    } catch (e) { alert(e.message || 'فعّل تنبيهات الخلفية الأول'); }
+      uiToast(r.sent > 0 ? 'تم إرسال إشعار تجربة ✓ المفروض يوصلك خلال ثواني' : 'مفيش إشعار اتبعت — اتأكد إنك سامح بالإشعارات ومفعّل تنبيهات الخلفية');
+    } catch (e) { uiToast(e.message || 'فعّل تنبيهات الخلفية الأول'); }
     pt.disabled = false; pt.textContent = old;
   };
 }

@@ -387,12 +387,16 @@ function wireEdit() {
     const [si, ii] = el.dataset.del.split(':').map(Number);
     S.template.sections[si].items.splice(ii, 1); saveTemplate(); renderDay();
   });
-  $$('#screen [data-add]').forEach(el => el.onclick = () => {
-    const si = +el.dataset.add; const label = prompt('اسم المهمة الجديدة:'); if (!label) return;
-    S.template.sections[si].items.push({ id: uid(), label: label.trim() }); saveTemplate(); renderDay();
+  $$('#screen [data-add]').forEach(el => el.onclick = async () => {
+    const si = +el.dataset.add;
+    const r = await uiPrompt({ title: 'مهمة جديدة', fields: [{ name: 'label', label: 'اسم المهمة', placeholder: 'مثلاً: قراءة ورد' }] }); if (!r) return;
+    S.template.sections[si].items.push({ id: uid(), label: r.label }); saveTemplate(); renderDay();
   });
   const addSec = $('#addSec');
-  if (addSec) addSec.onclick = () => { const title = prompt('اسم القسم الجديد:'); if (!title) return; S.template.sections.push({ id: uid(), title: title.trim(), items: [] }); saveTemplate(); renderDay(); };
+  if (addSec) addSec.onclick = async () => {
+    const r = await uiPrompt({ title: 'قسم جديد', fields: [{ name: 'title', label: 'اسم القسم', placeholder: 'مثلاً: أذكار' }] }); if (!r) return;
+    S.template.sections.push({ id: uid(), title: r.title, items: [] }); saveTemplate(); renderDay();
+  };
   $$('#screen [data-lbledit]').forEach(el => el.onblur = () => {
     const [si, ii] = el.dataset.lbledit.split(':').map(Number);
     const t = el.textContent.trim(); if (t) S.template.sections[si].items[ii].label = t; saveTemplate();
@@ -517,20 +521,25 @@ function wireSettings() {
   wireReminders();
   const sr = $('#setRecBtn'); if (sr) sr.onclick = setRecovery;
   const cp = $('#chgPassBtn'); if (cp) cp.onclick = changePassword;
-  $('#logoutBtn').onclick = () => { if (confirm('تسجيل الخروج؟ بياناتك محفوظة على السيرفر.')) logout(); };
+  $('#logoutBtn').onclick = async () => { if (await uiConfirm('تسجيل الخروج؟ بياناتك محفوظة على السيرفر.', { okText: 'خروج', danger: true })) logout(); };
 }
 
 async function setRecovery() {
-  const q = prompt('سؤال الأمان (مثلاً: اسم أول مدرسة؟):'); if (!q) return;
-  const a = prompt('الإجابة (افتكرها كويس — هتسترجع بيها الباسوورد):'); if (!a) return;
-  try { await api('set-recovery', 'POST', { recovery_q: q.trim(), recovery_a: a.trim() }); S.user.hasRecovery = true; alert('تم ضبط سؤال الأمان ✓'); renderTools(); }
-  catch (e) { alert('في مشكلة، حاول تاني'); }
+  const r = await uiPrompt({ title: 'سؤال استرجاع الباسوورد', message: 'لو نسيت الباسوورد هتسترجعه بإجابة السؤال ده — افتكرها كويس.', fields: [
+    { name: 'q', label: 'السؤال', placeholder: 'مثلاً: اسم أول مدرسة؟' },
+    { name: 'a', label: 'الإجابة', placeholder: 'إجابتك' },
+  ] }); if (!r) return;
+  try { await api('set-recovery', 'POST', { recovery_q: r.q, recovery_a: r.a }); S.user.hasRecovery = true; uiToast('تم ضبط سؤال الأمان ✓'); renderTools(); }
+  catch (e) { uiToast('في مشكلة، حاول تاني'); }
 }
 async function changePassword() {
-  const oldp = prompt('الباسوورد الحالي:'); if (!oldp) return;
-  const np = prompt('الباسوورد الجديد (٦ حروف على الأقل):'); if (!np) return;
-  try { await api('change-password', 'POST', { old: oldp, password: np }); alert('تم تغيير الباسوورد ✓'); }
-  catch (e) { alert(e.message || 'الباسوورد الحالي غلط'); }
+  const r = await uiPrompt({ title: 'تغيير الباسوورد', fields: [
+    { name: 'old', label: 'الباسوورد الحالي', type: 'password', placeholder: '••••••' },
+    { name: 'np', label: 'الباسوورد الجديد (٦ حروف على الأقل)', type: 'password', placeholder: '••••••' },
+  ] }); if (!r) return;
+  if (r.np.length < 6) { uiToast('الباسوورد الجديد لازم ٦ حروف على الأقل'); return; }
+  try { await api('change-password', 'POST', { old: r.old, password: r.np }); uiToast('تم تغيير الباسوورد ✓'); }
+  catch (e) { uiToast(e.message || 'الباسوورد الحالي غلط'); }
 }
 
 function renderSoon(title, msg) {
@@ -564,12 +573,9 @@ async function setupLocation() {
   saveSettings(); Prayer.askNotify(); Prayer.schedule(S.settings); render();
 }
 function pickCity() {
-  const names = Object.keys(Prayer.CITIES);
-  const choice = prompt('اكتب اسم مدينتك من دول:\n' + names.join(' - '), 'القاهرة');
-  if (!choice || !Prayer.CITIES[choice.trim()]) return;
-  const c = Prayer.CITIES[choice.trim()];
-  S.settings.prayer.lat = c[0]; S.settings.prayer.lng = c[1]; S.settings.prayer.city = choice.trim();
-  saveSettings(); Prayer.schedule(S.settings); render();
+  // الموقع التلقائي فشل → نوجّه المستخدم لقائمة المدن في الإعدادات
+  uiToast('مش قادر أحدد موقعك تلقائياً — اختر مدينتك من قائمة «مواعيد الصلاة» في الإعدادات');
+  S.tab = 'tools'; S.toolsub = 'home'; render();
 }
 let setT;
 function saveSettings() {
