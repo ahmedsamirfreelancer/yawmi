@@ -166,6 +166,14 @@
   .jcell{aspect-ratio:1;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;cursor:pointer}
   .rlegend{display:flex;flex-wrap:wrap;gap:10px;font-size:11.5px;color:var(--muted);margin:4px 0}
   .rlegend span{display:flex;align-items:center;gap:4px}.rlegend i{width:13px;height:13px;border-radius:4px;display:inline-block}
+  .hisn-h{background:#eef1f6;color:var(--navy);font-weight:800;font-size:12.5px;padding:7px 12px;border-top:1px solid var(--line)}
+  .items .hisn-h:first-child{border-top:0}
+  .qcard.hi{background:linear-gradient(135deg,#2a4a78,#1a3055);color:#fff}
+  .qcard.hi .qcard-body b{color:#fff}.qcard.hi .qcard-body span{color:#cdd6e2}
+  .tlast{font-size:14px;color:var(--navy);font-weight:700}
+  .tcont{font-size:13.5px;color:var(--ok);font-weight:700;margin-top:4px}
+  .tcont b,.tlast b{color:var(--gold)}
+  .tlog{font-size:12.5px;color:var(--muted);padding:3px 0}
 
   /* ===== أدوات ===== */
   .tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:13px}
@@ -209,6 +217,10 @@
   .goal-inp:focus{outline:0;border-bottom-color:var(--gold)}
   .goal.done .goal-inp{text-decoration:line-through;text-decoration-color:#bbb;color:var(--muted)}
   .add-item[data-addgoal]{border-color:var(--gold);color:var(--navy)}
+  /* مجموعة (صلوات/سنن) في وضع التعديل: عنوان فوق صفوفها يمنع لبس التكرار */
+  .gedit{border-bottom:1px solid var(--line)}
+  .gedit:last-child{border-bottom:0}
+  .glabel-e{font-size:12px;color:var(--navy);font-weight:800;padding:8px 10px 2px;background:#f6f4ee}
   /* ===== ستيبر صغير (دقائق الأذان/البومودورو) ===== */
   .ministep{display:inline-flex;align-items:center;gap:8px}
   .ministep button{width:30px;height:30px;border-radius:8px;border:0;background:var(--navy);color:#fff;font-size:18px;line-height:1;cursor:pointer;font-family:inherit}

@@ -12,38 +12,43 @@ function weekdaySat0(d) { return (d.getDay() + 1) % 7; }
 
 // ===== حالة افتراضية =====
 function defHifz() { return { enabled: false, startPage: 3, currentPage: 3, rate: 1, lastAdvance: '' }; }
-function defReview() { return { started: false, juz: {}, rate3: 1 }; }
+function defReview() { return { started: false, juz: {}, rate3: 1, track: defTrack() }; }
+function defTrack() { return { read: { page: 0, date: '', log: [] }, review: { page: 0, date: '', log: [] } }; }
+function relDate(s) {
+  if (!s) return 'لسه ماعملتهاش';
+  const t = todayKey(); if (s === t) return 'النهاردة';
+  const y = new Date(); y.setDate(y.getDate() - 1); if (s === dayKey(y)) return 'أمس';
+  const diff = Math.round((new Date(t + 'T00:00') - new Date(s + 'T00:00')) / 86400000);
+  return diff > 0 ? `من ${diff} يوم` : s;
+}
 
 // ===== جدول الحصون الخمسة اليومي (يتولّد تلقائياً) =====
 function husunPlan(h, date) {
   const cur = Math.max(h.startPage, Math.min(MUSHAF_PAGES, h.currentPage));
   const start = h.startPage || 3;
   const tasks = [];
-  // ١) الحفظ الجديد
-  tasks.push({ id: 'new', t: 'الحفظ الجديد', d: `صفحة ${cur} (جزء ${juzOf(cur)})`, min: 15 });
-  // ٢) مراجعة القريب: حتى ٢٠ صفحة ملاصقة قبل صفحة الحفظ
+  const H1 = 'الحصن الأول', H2 = 'الحصن الثاني — التحضير', H3 = 'الحصن الثالث', H4 = 'الحصن الرابع', H5 = 'الحصن الخامس';
+  // الحصن الأول: القراءة المستمرة + الاستماع المنهجي
+  tasks.push({ id: 'read', hisn: 1, hisnName: H1, t: 'القراءة المستمرة', d: 'جزآن حدراً يومياً (ختمة كل ١٥ يوم)', min: 40 });
+  tasks.push({ id: 'listen', hisn: 1, hisnName: H1, t: 'الاستماع المنهجي', d: 'حِزب يومياً لقارئ متقن', min: 15 });
+  // الحصن الثاني: التحضير (أسبوعي ← ليلي ← قبلي)
+  const wkE = Math.min(MUSHAF_PAGES, cur + 7);
+  if (cur + 1 <= wkE) tasks.push({ id: 'usbu', hisn: 2, hisnName: H2, t: 'التحضير الأسبوعي', d: `قراءة صفحات الأسبوع الجاي: ص ${cur + 1}–${wkE}`, min: 10 });
+  const nx = cur + 1;
+  if (nx <= MUSHAF_PAGES) tasks.push({ id: 'layli', hisn: 2, hisnName: H2, t: 'التحضير الليلي', d: `صفحة ${nx}: استماع ١٥د + قراءة ١٥د قبل النوم`, min: 30 });
+  tasks.push({ id: 'qabli', hisn: 2, hisnName: H2, t: 'التحضير القبلي', d: `قراءة صفحة ${cur} ١٥د قبل الحفظ مباشرة`, min: 15 });
+  // الحصن الثالث: الحفظ الجديد
+  tasks.push({ id: 'new', hisn: 3, hisnName: H3, t: 'الحفظ الجديد', d: `صفحة ${cur} (جزء ${juzOf(cur)})`, min: 15 });
+  // الحصن الرابع: مراجعة القريب (٢٠ صفحة ملاصقة)
   const nearStart = Math.max(start, cur - 20), nearEnd = cur - 1;
-  if (nearEnd >= nearStart) tasks.push({ id: 'near', t: 'مراجعة القريب', d: `من ص ${nearStart} إلى ص ${nearEnd} (حدراً)`, min: 20 });
-  // ٣) مراجعة البعيد: أنابيب ٤٠ صفحة لكل يوم أسبوع
+  if (nearEnd >= nearStart) tasks.push({ id: 'near', hisn: 4, hisnName: H4, t: 'مراجعة القريب', d: `٢٠ صفحة ملاصقة: ص ${nearStart}–${nearEnd} حدراً`, min: 20 });
+  // الحصن الخامس: مراجعة البعيد (لا تزيد عن ٤٠ صفحة/يوم)
   const farMax = nearStart - 1;
   if (farMax >= start) {
     const wd = weekdaySat0(date), ranges = [];
-    for (let i = 0; ; i++) {
-      const s = start + i * 40; if (s > farMax) break;
-      if (i % 7 === wd) ranges.push([s, Math.min(farMax, s + 39)]);
-    }
-    if (ranges.length) tasks.push({ id: 'far', t: 'مراجعة البعيد', d: ranges.map(r => `ص ${r[0]}–${r[1]}`).join('، '), min: 40 });
+    for (let i = 0; ; i++) { const s = start + i * 40; if (s > farMax) break; if (i % 7 === wd) ranges.push([s, Math.min(farMax, s + 39)]); }
+    if (ranges.length) tasks.push({ id: 'far', hisn: 5, hisnName: H5, t: 'مراجعة البعيد', d: `(لا تزيد عن ٤٠ صفحة) ${ranges.map(r => `ص ${r[0]}–${r[1]}`).join('، ')}`, min: 40 });
   }
-  // ٤) التحضير القبلي: تكرار صفحة الحفظ قبلها مباشرة
-  tasks.push({ id: 'qabli', t: 'التحضير القبلي', d: `تكرار صفحة ${cur} حدراً (~١٥ مرة)`, min: 15 });
-  // ٥) التحضير الليلي: صفحة الغد + استماع ١٠×
-  const nx = cur + 1;
-  if (nx <= MUSHAF_PAGES) tasks.push({ id: 'layli', t: 'التحضير الليلي', d: `صفحة ${nx} قبل النوم + استماع ١٠×`, min: 15 });
-  // ٦) التحضير الأسبوعي: قراءة صفحات الأسبوع الجاي
-  const wkE = Math.min(MUSHAF_PAGES, cur + 7);
-  if (cur + 1 <= wkE) tasks.push({ id: 'usbu', t: 'التحضير الأسبوعي', d: `قراءة ص ${cur + 1}–${wkE} (للأسبوع الجاي)`, min: 10 });
-  // ٧) القراءة المستمرة + الاستماع المنهجي
-  tasks.push({ id: 'mustamirra', t: 'القراءة المستمرة + الاستماع', d: 'جزآن حدراً + استماع حِزب', min: 40 });
   return tasks;
 }
 
@@ -71,12 +76,21 @@ function renderQuran() {
   const sub = S.qsub || 'home';
   if (sub === 'husun') return renderHusun();
   if (sub === 'rusukh') return renderRusukh();
-  // الصفحة الرئيسية: بطاقتان
+  if (sub === 'track') return renderQuranTrack();
+  // الصفحة الرئيسية: بطاقات
   const h = S.hifz || defHifz(), rev = S.review || defReview();
+  const tr = ensureTrack();
   const hifzInfo = h.enabled ? `صفحة ${h.currentPage} • جزء ${juzOf(h.currentPage)} • حفظت ${Math.max(0, h.currentPage - h.startPage)} صفحة` : 'مش مفعّل — اضغط للإعداد';
   const masteredN = juzByLevel(rev, 'mastered').length, goodN = juzByLevel(rev, 'good').length, weakN = juzByLevel(rev, 'weak').length;
   const revInfo = rev.started ? `متقن ${masteredN} • ضبط ${goodN} • إعادة ${weakN} جزء` : 'مش مفعّل — صنّف محفوظك';
+  // ملخص "أين وصلت"
+  const rdInfo = tr.read.page ? `آخر مرة ص ${tr.read.page} (${relDate(tr.read.date)}) • كمّل من ${tr.read.page + 1}` : 'سجّل أول قراءة';
   $('#screen').innerHTML = `
+    <div class="qcard hi" id="cardTrack">
+      <div class="qcard-ic">📌</div>
+      <div class="qcard-body"><b>أين وصلت؟ (متابعة الورد)</b><span>📖 ${esc(rdInfo)}</span></div>
+      <div class="qcard-go">›</div>
+    </div>
     <div class="qcard" id="cardHusun">
       <div class="qcard-ic">🏰</div>
       <div class="qcard-body"><b>الحفظ — الحصون الخمسة</b><span>${esc(hifzInfo)}</span></div>
@@ -88,8 +102,64 @@ function renderQuran() {
       <div class="qcard-go">›</div>
     </div>
     <div class="qnote">طريقة د. سعيد أبو العلا حمزة — "تعاهدوا هذا القرآن" 🤍</div>`;
+  $('#cardTrack').onclick = () => { S.qsub = 'track'; renderQuran(); };
   $('#cardHusun').onclick = () => { S.qsub = 'husun'; renderQuran(); };
   $('#cardRusukh').onclick = () => { S.qsub = 'rusukh'; renderQuran(); };
+}
+
+function ensureTrack() {
+  S.review = S.review || defReview();
+  if (!S.review.track) S.review.track = defTrack();
+  if (!S.review.track.read) S.review.track.read = { page: 0, date: '', log: [] };
+  if (!S.review.track.review) S.review.track.review = { page: 0, date: '', log: [] };
+  return S.review.track;
+}
+
+// شاشة "أين وصلت": قراءة + مراجعة (موضع وتاريخ) + ملخص الحفظ من الحصون
+function renderQuranTrack() {
+  const tr = ensureTrack();
+  const h = S.hifz || defHifz();
+  const blocks = [
+    { key: 'read', ic: '📖', title: 'القراءة (التلاوة)', t: tr.read },
+    { key: 'review', ic: '🔁', title: 'المراجعة', t: tr.review },
+  ].map(b => {
+    const t = b.t;
+    const last = t.page ? `آخر مرة: ص ${t.page} (جزء ${juzOf(t.page)}) — ${relDate(t.date)}` : 'لسه ماسجّلتش حاجة';
+    const cont = t.page ? `كمّل النهاردة من ص <b>${t.page + 1}</b>` : 'ابدأ من ص <b>1</b>';
+    const logHtml = (t.log || []).slice(-3).reverse().map(e => `<div class="tlog">${esc(relDate(e.d))}: ص ${e.from}–${e.to}</div>`).join('') || '<div class="tlog">مفيش سجل بعد</div>';
+    return `<div class="section"><div class="sec-head"><span>${b.ic} ${b.title}</span></div>
+      <div class="setbox">
+        <div class="tlast">${last}</div>
+        <div class="tcont">${cont}</div>
+        <label class="setlbl">وصلت النهاردة لـ صفحة:</label>
+        <div class="stepper"><button data-tk="${b.key}" data-d="-1">−</button><b id="tkv_${b.key}">${t.page ? t.page + 1 : 1}</b><button data-tk="${b.key}" data-d="1">+</button></div>
+        <div class="seg sm" style="margin-top:6px"><button type="button" data-tkj="${b.key}" data-d="-20">− جزء</button><button type="button" data-tkj="${b.key}" data-d="20">+ جزء</button></div>
+        <button class="primary" data-tksave="${b.key}" style="margin-top:12px">✅ سجّل</button>
+        <label class="setlbl" style="margin-top:12px">آخر أيام:</label>
+        ${logHtml}
+      </div></div>`;
+  }).join('');
+  const hInfo = h.enabled
+    ? `بتحفظ دلوقتي ص <b>${h.currentPage}</b> (جزء ${juzOf(h.currentPage)})${h.lastAdvance ? ` • آخر تقدّم ${relDate(h.lastAdvance)}` : ''}`
+    : 'الحفظ مش مفعّل';
+  const hifzBlock = `<div class="section"><div class="sec-head"><span>🏰 الحفظ</span></div>
+      <div class="setbox"><div class="tlast">${hInfo}</div>
+      <button class="mini" id="goHusun" style="margin-top:8px">${h.enabled ? 'افتح الحصون وكمّل' : 'فعّل الحفظ'}</button></div></div>`;
+  $('#screen').innerHTML = `<p class="qexplain">سجّل لحد فين وصلت كل يوم، وبكرة هتلاقي "كمّل من ص كذا" جاهزة 🤍</p>` + blocks + hifzBlock;
+
+  // ستيبر القيمة المؤقتة لكل قسم
+  const valEl = k => document.getElementById('tkv_' + k);
+  const clamp = n => Math.max(1, Math.min(MUSHAF_PAGES, n));
+  $$('#screen [data-tk]').forEach(btn => btn.onclick = () => { const k = btn.dataset.tk; const el = valEl(k); el.textContent = clamp((+el.textContent) + (+btn.dataset.d)); });
+  $$('#screen [data-tkj]').forEach(btn => btn.onclick = () => { const k = btn.dataset.tkj; const el = valEl(k); el.textContent = clamp((+el.textContent) + (+btn.dataset.d)); });
+  $$('#screen [data-tksave]').forEach(btn => btn.onclick = () => {
+    const k = btn.dataset.tksave; const t = tr[k]; const to = clamp(+valEl(k).textContent);
+    const from = (t.page || 0) + 1;
+    t.log = t.log || []; t.log.push({ d: todayKey(), from: from <= to ? from : to, to }); if (t.log.length > 14) t.log = t.log.slice(-14);
+    t.page = to; t.date = todayKey();
+    saveReview(); renderQuranTrack();
+  });
+  const gh = $('#goHusun'); if (gh) gh.onclick = () => { if (!h.enabled) { S.qsub = 'husun'; } else { S.qsub = 'husun'; } renderQuran(); };
 }
 
 // ===== شاشة الحصون =====
@@ -119,11 +189,12 @@ function renderHusun() {
   const tasks = husunPlan(h, date);
   const total = tasks.reduce((a, t) => a + t.min, 0);
   const doneN = tasks.filter(t => v['q_h_' + t.id] === true).length;
-  let items = tasks.map(t => {
+  let items = '', lastHisn = 0;
+  tasks.forEach(t => {
+    if (t.hisn !== lastHisn) { items += `<div class="hisn-h">${esc(t.hisnName)}</div>`; lastHisn = t.hisn; }
     const on = v['q_h_' + t.id] === true;
-    return `<div class="item ${on ? 'done' : ''}" data-qh="${t.id}">${CHK}
-      <div class="lbl"><span>${esc(t.t)}</span><small>${esc(t.d)} • ~${t.min}د</small></div></div>`;
-  }).join('');
+    items += `<div class="item ${on ? 'done' : ''}" data-qh="${t.id}">${CHK}<div class="lbl"><span>${esc(t.t)}</span><small>${esc(t.d)} • ~${t.min}د</small></div></div>`;
+  });
   $('#screen').innerHTML = `
     <div class="psrip"><div class="pnext" style="margin:0;font-size:14px;color:#fff">📍 صفحة الحفظ النهاردة: <b style="color:var(--gold)">${h.currentPage}</b> • جزء ${juzOf(h.currentPage)}</div>
       <div class="pnext" style="margin-top:6px">حفظت ${Math.max(0, h.currentPage - h.startPage)} من ${MUSHAF_PAGES - h.startPage + 1} صفحة • ${doneN}/${tasks.length} حصون النهاردة</div>

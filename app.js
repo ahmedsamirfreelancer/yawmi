@@ -294,16 +294,18 @@ function renderDay() {
     let i = 0;
     while (i < sec.items.length) {
       const it = sec.items[i];
-      if (it.group && !S.edit) {
-        // اجمع المجموعة (pills)
-        let j = i, pills = '';
+      if (it.group) {
+        // اجمع المجموعة — pills في العرض، وصفوف تحت عنوان المجموعة في التعديل (يمنع لبس "الفجر مكرر")
+        let j = i, inner = '';
         const gname = it.group;
         while (j < sec.items.length && sec.items[j].group === gname) {
           const p = sec.items[j];
-          pills += `<div class="pill ${v[p.id] === true ? 'on' : ''}" data-tog="${p.id}">${esc(p.label)}${p.note ? `<small>${esc(p.note)}</small>` : ''}</div>`;
+          if (S.edit) inner += renderItem(sec, p, si, j, v);
+          else inner += `<div class="pill ${v[p.id] === true ? 'on' : ''}" data-tog="${p.id}">${esc(p.label)}${p.note ? `<small>${esc(p.note)}</small>` : ''}</div>`;
           j++;
         }
-        html += `<div class="pills"><div class="glabel">${esc(gname)}</div>${pills}</div>`;
+        if (S.edit) html += `<div class="gedit"><div class="glabel-e">${esc(gname)}</div>${inner}</div>`;
+        else html += `<div class="pills"><div class="glabel">${esc(gname)}</div>${inner}</div>`;
         i = j; continue;
       }
       html += renderItem(sec, it, si, i, v);

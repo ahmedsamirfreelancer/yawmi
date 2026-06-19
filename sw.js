@@ -1,5 +1,5 @@
 // Service Worker — تخزين كل الملفات للعمل أوفلاين + استقبال تنبيهات الخلفية
-const CACHE = 'yawmi-v11';
+const CACHE = 'yawmi-v12';
 const ASSETS = [
   './',
   './index.html',
