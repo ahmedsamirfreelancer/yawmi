@@ -19,6 +19,10 @@ const S = {
 const dayKey = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const todayKey = () => dayKey(new Date());
 
+// معاينة صوت الأذان (للإعدادات)
+let adhanPlaying = '';
+function resetPrevIcons() { $$('#screen [data-prev]').forEach(b => b.textContent = '▶'); }
+
 // ===== API =====
 async function api(route, method = 'GET', bodyObj = null) {
   const opt = { method, headers: {} };
@@ -193,7 +197,7 @@ function onAuth(data) {
   localStorage.setItem('yawmi_template', JSON.stringify(S.template));
   localStorage.setItem('yawmi_settings', JSON.stringify(S.settings));
   document.body.classList.remove('auth-mode');
-  buildShell(); render();
+  buildShell(); render(); applyHash();
   syncFromServer(); initPrayer(); loadQuran(); scheduleReminders(); maybeResubscribePush();
 }
 
@@ -241,6 +245,7 @@ function buildShell() {
 
 function render() {
   if (!S.token) return renderAuth('login');
+  if (adhanPlaying) { try { Prayer.stopAdhan(); } catch (e) {} adhanPlaying = ''; }
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
   if (S.tab === 'day') renderDay();
   else if (S.tab === 'progress') renderProgress();
@@ -458,13 +463,10 @@ function settingsSectionsHTML() {
           ${['fajr:الفجر', 'dhuhr:الظهر', 'asr:العصر', 'maghrib:المغرب', 'isha:العشاء'].map(o => { const [k, l] = o.split(':'); const val = (p.offsets && p.offsets[k]) || 0; return `<div class="rem-row"><span>${l}</span><div class="ministep"><button data-offd="${k}:-1">−</button><b id="off_${k}">${val}</b><button data-offd="${k}:1">+</button></div></div>`; }).join('')}
         </div>
         <div class="acct-row"><span>الأذان وقت الصلاة</span><label class="sw"><input type="checkbox" id="adhanOn" ${ad.enabled ? 'checked' : ''}><i></i></label></div>
-        <label class="setlbl">صوت الأذان</label>
-        <select id="reciter">
-          <option value="a1" ${ad.reciter === 'a1' ? 'selected' : ''}>أذان مختار ١</option>
-          <option value="a2" ${ad.reciter === 'a2' ? 'selected' : ''}>أذان مختار ٢</option>
-          <option value="a3" ${ad.reciter === 'a3' ? 'selected' : ''}>أذان مختار ٣</option>
-        </select>
-        <button class="mini ghost" id="testAdhan">▶ جرّب الأذان</button>` : ''}
+        <label class="setlbl">صوت الأذان — اضغط ▶ تسمعه، ودوس الاسم تختاره</label>
+        <div class="adhan-list">
+          ${ADHANS.map(a => `<div class="adhan-row ${ad.reciter === a.id ? 'sel' : ''}" data-areciter="${a.id}"><span class="adhan-name">${esc(a.name)}</span><button class="adhan-prev" data-prev="${a.id}">▶</button></div>`).join('')}
+        </div>` : ''}
       </div></div>
     ${remindersHTML()}
     <div class="section"><div class="sec-head"><span>🔐 الحساب والأمان</span></div>
@@ -497,9 +499,19 @@ function wireSettings() {
     S.settings.prayer.lat = co[0]; S.settings.prayer.lng = co[1]; S.settings.prayer.city = c;
     saveSettings(); Prayer.askNotify(); Prayer.schedule(S.settings); render();
   };
-  const ao = $('#adhanOn'); if (ao) ao.onchange = () => { S.settings.adhan.enabled = ao.checked; saveSettings(); if (ao.checked) { Prayer.askNotify(); Prayer.schedule(S.settings); } };
-  const rc = $('#reciter'); if (rc) rc.onchange = () => { S.settings.adhan.reciter = rc.value; saveSettings(); };
-  const ta = $('#testAdhan'); if (ta) ta.onclick = () => Prayer.playAdhan(S.settings);
+  const ao = $('#adhanOn'); if (ao) ao.onchange = () => { S.settings.adhan = S.settings.adhan || {}; S.settings.adhan.enabled = ao.checked; saveSettings(); if (ao.checked) { Prayer.askNotify(); Prayer.schedule(S.settings); } };
+  $$('#screen [data-areciter]').forEach(row => row.onclick = (e) => {
+    if (e.target.closest('[data-prev]')) return;
+    S.settings.adhan = S.settings.adhan || {}; S.settings.adhan.reciter = row.dataset.areciter; saveSettings();
+    $$('#screen .adhan-row').forEach(r => r.classList.toggle('sel', r === row));
+  });
+  $$('#screen [data-prev]').forEach(btn => btn.onclick = () => {
+    const id = btn.dataset.prev;
+    if (adhanPlaying === id) { Prayer.stopAdhan(); adhanPlaying = ''; resetPrevIcons(); return; }
+    Prayer.stopAdhan(); resetPrevIcons();
+    Prayer.play(id); adhanPlaying = id; btn.textContent = '⏸';
+    try { Prayer.audioEl().onended = () => { adhanPlaying = ''; resetPrevIcons(); }; } catch (x) {}
+  });
   wireReminders();
   const sr = $('#setRecBtn'); if (sr) sr.onclick = setRecovery;
   const cp = $('#chgPassBtn'); if (cp) cp.onclick = changePassword;
@@ -567,6 +579,26 @@ function initPrayer() {
   if (S.settings && S.settings.prayer && S.settings.prayer.lat != null) { Prayer.askNotify(); Prayer.schedule(S.settings); }
 }
 
+// ===== توجيه من الإشعار (hash) =====
+function applyHash() {
+  const h = (location.hash || '').replace(/^#/, '');
+  if (!h || !S.token) return;
+  const [seg, sub] = h.split('/');
+  if (['day', 'quran', 'progress', 'tools'].includes(seg)) S.tab = seg;
+  if (seg === 'adhkar') { S.tab = 'tools'; S.toolsub = 'adhkar'; S.adhkarCat = sub || null; }
+  if (document.querySelector('#tabs')) render();
+}
+window.addEventListener('hashchange', applyHash);
+if ('serviceWorker' in navigator && navigator.serviceWorker) {
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data && e.data.type === 'navigate' && e.data.url) {
+      const hk = (e.data.url.split('#')[1] || '');
+      location.hash = hk ? '#' + hk : '';
+      applyHash();
+    }
+  });
+}
+
 // ===== تشغيل =====
 function boot() {
   if (S.token) {
@@ -577,7 +609,7 @@ function boot() {
     loadQuran();
     api('bootstrap').then(d => { S.user = d.user; S.template = d.template; S.settings = d.settings || DEFAULT_SETTINGS; S.level = d.level;
       localStorage.setItem('yawmi_template', JSON.stringify(S.template)); localStorage.setItem('yawmi_settings', JSON.stringify(S.settings));
-      if (!document.querySelector('#tabs')) buildShell(); render(); syncFromServer(); initPrayer(); scheduleReminders(); maybeResubscribePush(); })
+      if (!document.querySelector('#tabs')) buildShell(); render(); applyHash(); syncFromServer(); initPrayer(); scheduleReminders(); maybeResubscribePush(); })
       .catch(e => { if (e.code === 401) logout(); });
   } else {
     renderAuth('login');

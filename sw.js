@@ -1,5 +1,5 @@
 // Service Worker — تخزين كل الملفات للعمل أوفلاين + استقبال تنبيهات الخلفية
-const CACHE = 'yawmi-v6';
+const CACHE = 'yawmi-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const ASSETS = [
   './prayer.js',
   './quran.js',
   './tools.js',
+  './adhkar.js',
   './push.js',
   './manifest.webmanifest',
   './icon-192.png',
@@ -57,14 +58,16 @@ self.addEventListener('push', (e) => {
   try { d = e.data.json(); } catch (x) { try { d.body = e.data.text(); } catch (y) {} }
   e.waitUntil(self.registration.showNotification(d.title || 'ورقة اليوم', {
     body: d.body || '', icon: 'icon-192.png', badge: 'icon-192.png',
-    tag: d.tag || 'yawmi', dir: 'rtl', lang: 'ar', vibrate: [200, 100, 200]
+    tag: d.tag || 'yawmi', dir: 'rtl', lang: 'ar', vibrate: [200, 100, 200],
+    silent: false, renotify: true, data: { url: d.url || './' }
   }));
 });
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || './';
   e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cl) => {
-    for (const c of cl) { if ('focus' in c) return c.focus(); }
-    if (clients.openWindow) return clients.openWindow('./');
+    for (const c of cl) { if ('focus' in c) { c.postMessage({ type: 'navigate', url }); return c.focus(); } }
+    if (clients.openWindow) return clients.openWindow(url);
   }));
 });

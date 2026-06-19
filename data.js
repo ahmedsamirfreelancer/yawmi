@@ -110,9 +110,17 @@ const SEEDS = {
 const DEFAULT_SETTINGS = {
   prayer: { lat: null, lng: null, city: '', method: 'EGYPT', asr: 'Standard', offsets: { fajr: 0, dhuhr: 0, asr: 0, maghrib: 0, isha: 0 } },
   adhan: { enabled: true, reciter: 'a1' },
-  reminders: { sabah: '', masa: '', wird: '', sleep: '' },
+  // التذكيرات: {on, time}. time فاضي = وقت تلقائي (نسبةً للصلاة). الصباح/المساء/النوم مفعّلة افتراضياً
+  reminders: { sabah: { on: true, time: '' }, masa: { on: true, time: '' }, wird: { on: false, time: '' }, sleep: { on: true, time: '' } },
   pomodoro: { focus: 25, brk: 5, long: 15 },
 };
+
+// أصوات الأذان (محايدة — تفادي نسبة لقارئ غلط). إضافة صوت = ملف adhan/aN.mp3 + سطر هنا
+const ADHANS = [
+  { id: 'a1', name: 'أذان مختار ١' }, { id: 'a2', name: 'أذان مختار ٢' }, { id: 'a3', name: 'أذان مختار ٣' },
+  { id: 'a4', name: 'أذان مختار ٤' }, { id: 'a5', name: 'أذان مختار ٥' }, { id: 'a6', name: 'أذان مختار ٦' },
+  { id: 'a7', name: 'أذان مختار ٧' }, { id: 'a8', name: 'أذان مختار ٨' },
+];
 
 // آية/حديث اليوم (قائمة محلية تتغيّر يومياً)
 const DAILY_ITEMS = [

@@ -292,6 +292,28 @@ try {
       out(['ok' => true]);
     }
 
+    // ===== Web Push: إرسال إشعار تجربة فوري =====
+    case 'push-test': {
+      $uid = requireUser();
+      require_once __DIR__ . '/webpush.php';
+      global $cfg;
+      if (empty($cfg['vapid_private_pem'])) fail('الإشعارات غير مهيّأة على السيرفر', 500);
+      $st = db()->prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?');
+      $st->execute([$uid]);
+      $subs = $st->fetchAll();
+      if (!$subs) fail('مفيش اشتراك — فعّل تنبيهات الخلفية الأول', 400);
+      $sent = 0; $codes = [];
+      foreach ($subs as $s) {
+        try {
+          $c = wp_send($s, ['title' => '✅ تجربة إشعار', 'body' => 'التنبيهات شغّالة 🤍', 'tag' => 'test', 'url' => './#tools'], $cfg);
+          $codes[] = $c;
+          if ($c >= 200 && $c < 300) $sent++;
+          if ($c === 404 || $c === 410) db()->prepare('DELETE FROM push_subscriptions WHERE endpoint = ?')->execute([$s['endpoint']]);
+        } catch (Throwable $e) { $codes[] = 0; error_log('push-test: ' . $e->getMessage()); }
+      }
+      out(['sent' => $sent, 'codes' => $codes]);
+    }
+
     default:
       fail('unknown route', 404);
   }

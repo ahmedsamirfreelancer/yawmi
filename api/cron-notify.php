@@ -32,29 +32,44 @@ foreach ($rows as $row) {
   $curMin = $lh * 60 + $lm;
   $today = gmdate('Y-m-d', $local);
 
-  $due = []; // [tag => [title, body]]
+  $due = []; // [tag => [title, body, url]]
 
-  // أذان الصلوات
-  if (!empty($adhan['enabled']) && isset($p['lat'], $p['lng']) && $p['lat'] !== null) {
+  // مواعيد الصلاة (تُحسب لو فيه موقع — تُستخدم للأذان وللتذكيرات التلقائية)
+  $times = null;
+  if (isset($p['lat'], $p['lng']) && $p['lat'] !== null) {
     $y = (int)gmdate('Y', $local); $mo = (int)gmdate('n', $local); $d = (int)gmdate('j', $local);
     $asrFactor = (($p['asr'] ?? 'Standard') === 'Hanafi') ? 2 : 1;
     $times = PrayTimes::times($y,$mo,$d, (float)$p['lat'], (float)$p['lng'], $tz/60.0,
-                              $p['method'] ?? 'EGYPT', $asrFactor, $p['offsets'] ?? []);
+                             $p['method'] ?? 'EGYPT', $asrFactor, $p['offsets'] ?? []);
+  }
+
+  // أذان الصلوات
+  if (!empty($adhan['enabled']) && $times) {
     $labels = ['fajr'=>'الفجر','dhuhr'=>'الظهر','asr'=>'العصر','maghrib'=>'المغرب','isha'=>'العشاء'];
     foreach ($labels as $k=>$lbl) {
       if (!isset($times[$k]) || is_nan($times[$k])) continue;
-      $pm = (int)round($times[$k] * 60);
-      if ($pm === $curMin) $due['adhan_'.$k] = ['حان وقت ' . $lbl, 'حيّ على الصلاة 🤍'];
+      if ((int)round($times[$k] * 60) === $curMin) $due['adhan_'.$k] = ['حان وقت ' . $lbl, 'حيّ على الصلاة 🤍', './#day'];
     }
   }
 
-  // التذكيرات (HH:MM)
-  $remLabels = ['sabah'=>'أذكار الصباح','masa'=>'أذكار المساء','wird'=>'وِرد القرآن','sleep'=>'وقت النوم وأذكاره'];
-  foreach ($remLabels as $k=>$lbl) {
-    $val = trim((string)($rem[$k] ?? ''));
-    if (!preg_match('/^(\d{1,2}):(\d{2})$/', $val, $m)) continue;
-    $rmin = ((int)$m[1]) * 60 + (int)$m[2];
-    if ($rmin === $curMin) $due['rem_'.$k] = ['⏰ ' . $lbl, 'افتكر وردك النهاردة'];
+  // التذكيرات التلقائية (نسبةً للصلاة) + override يدوي. الشكل: {on,time} أو نص قديم
+  $remDefs = [
+    'sabah' => ['⏰ أذكار الصباح', 'افتح وردك من أذكار الصباح 🤍', './#adhkar/sabah', 'fajr',  true],
+    'masa'  => ['⏰ أذكار المساء', 'افتح وردك من أذكار المساء 🤍', './#adhkar/masa', 'asr',   true],
+    'wird'  => ['⏰ وِرد القرآن', 'وقت وردك من القرآن 🤍', './#quran', 'dhuhr', false],
+    'sleep' => ['🌙 أذكار النوم', 'اقرأ أذكار النوم قبل ما تنام 🤍', './#adhkar/sleep', null, true],
+  ];
+  foreach ($remDefs as $k => $def) {
+    $rc = $rem[$k] ?? null;
+    $on = is_array($rc) ? (($rc['on'] ?? true) ? true : false) : $def[4];
+    if (!$on) continue;
+    $manual = is_array($rc) ? trim((string)($rc['time'] ?? '')) : (is_string($rc) ? trim($rc) : '');
+    $mins = null;
+    if (preg_match('/^(\d{1,2}):(\d{2})$/', $manual, $mm)) $mins = ((int)$mm[1]) * 60 + (int)$mm[2];
+    elseif ($k === 'sleep') $mins = 23 * 60;
+    elseif ($times && isset($times[$def[3]]) && !is_nan($times[$def[3]])) $mins = (int)round($times[$def[3]] * 60) + 30;
+    if ($mins === null) continue;
+    if (($mins % 1440) === $curMin) $due['rem_'.$k] = [$def[0], $def[1], $def[2]];
   }
 
   if (!$due) continue;
@@ -69,7 +84,7 @@ foreach ($rows as $row) {
     try {
       $code = wp_send(
         ['endpoint'=>$row['endpoint'], 'p256dh'=>$row['p256dh'], 'auth'=>$row['auth']],
-        ['title'=>$msg[0], 'body'=>$msg[1], 'tag'=>$tag],
+        ['title'=>$msg[0], 'body'=>$msg[1], 'tag'=>$tag, 'url'=>$msg[2] ?? './'],
         $cfg
       );
       if ($code === 404 || $code === 410) $dead[] = $row['id'];

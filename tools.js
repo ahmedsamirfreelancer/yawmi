@@ -6,6 +6,7 @@ const KAABA = [21.4225, 39.8262];
 // ===== الرئيسية =====
 function renderTools() {
   const sub = S.toolsub || 'home';
+  if (sub === 'adhkar') return renderAdhkar();
   $('#hdr').innerHTML = `<div class="h-row"><div class="h-title">⚙️ أدوات وإعدادات</div>
     ${sub !== 'home' ? `<button class="edit-btn" id="tBack">‹ رجوع</button>` : ''}</div>`;
   const back = $('#tBack'); if (back) back.onclick = () => { S.toolsub = 'home'; renderTools(); };
@@ -16,12 +17,13 @@ function renderTools() {
   $('#screen').innerHTML = `
     ${dailyAyahHTML()}
     <div class="tgrid">
+      <button class="ttile big" data-go="adhkar"><span>📿</span>الأذكار</button>
       <button class="ttile" data-go="pomodoro"><span>⏱️</span>بومودورو</button>
-      <button class="ttile" data-go="tasbih"><span>📿</span>السبحة</button>
+      <button class="ttile" data-go="tasbih"><span>📿</span>سبحة حرة</button>
       <button class="ttile" data-go="qibla"><span>🧭</span>القبلة</button>
     </div>
     ${settingsSectionsHTML()}`;
-  $$('#screen [data-go]').forEach(b => b.onclick = () => { S.toolsub = b.dataset.go; renderTools(); });
+  $$('#screen [data-go]').forEach(b => b.onclick = () => { S.toolsub = b.dataset.go; if (b.dataset.go === 'adhkar') S.adhkarCat = null; renderTools(); });
   wireSettings();
 }
 
@@ -256,28 +258,70 @@ function renderQibla() {
 }
 
 // ===== التذكيرات (HTML + wiring يُستدعى من الإعدادات) =====
-function remindersHTML() {
+const REM_DEFS = { sabah: { l: 'أذكار الصباح', d: 'تلقائياً بعد الفجر', on: true }, masa: { l: 'أذكار المساء', d: 'تلقائياً بعد العصر', on: true }, wird: { l: 'وِرد القرآن', d: 'تلقائياً بعد الظهر', on: false }, sleep: { l: 'أذكار النوم', d: 'تلقائياً ١١م', on: true } };
+function remConfig() {
   const r = (S.settings && S.settings.reminders) || {};
+  const out = {};
+  Object.keys(REM_DEFS).forEach(k => {
+    const v = r[k];
+    if (v && typeof v === 'object') out[k] = { on: v.on !== false, time: v.time || '' };
+    else if (typeof v === 'string' && v) out[k] = { on: true, time: v };
+    else out[k] = { on: REM_DEFS[k].on, time: '' };
+  });
+  return out;
+}
+// الوقت التلقائي (نسبةً للصلاة) لحساب الجدولة المحلية
+function remAutoTime(k) {
+  if (k === 'sleep') return '23:00';
+  const t = Prayer.timesFor(new Date(), S.settings); if (!t) return '';
+  const base = k === 'sabah' ? 'fajr' : (k === 'masa' ? 'asr' : 'dhuhr');
+  if (t[base] == null || isNaN(t[base])) return '';
+  let mins = (Math.round(t[base] * 60) + 30) % 1440;
+  return String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
+}
+function remindersHTML() {
+  const cfg = remConfig();
   const pushOn = !!(S.settings && S.settings.pushEnabled);
-  const rows = [['sabah', 'أذكار الصباح'], ['masa', 'أذكار المساء'], ['wird', 'وِرد القرآن'], ['sleep', 'وقت النوم']];
-  return `<div class="section"><div class="sec-head"><span>⏰ التذكيرات</span></div>
+  const rows = Object.keys(REM_DEFS).map(k => {
+    const c = cfg[k], auto = remAutoTime(k);
+    const hint = c.time ? '' : (auto ? `${REM_DEFS[k].d} (${auto})` : REM_DEFS[k].d);
+    return `<div class="rem-row">
+      <span>${REM_DEFS[k].l}<small>${c.time ? 'وقت محدد' : esc(hint)}</small></span>
+      <div class="rem-ctl">
+        <input type="time" data-remt="${k}" value="${esc(c.time)}" title="حدد وقت (فاضي = تلقائي)">
+        <label class="sw"><input type="checkbox" data-remon="${k}" ${c.on ? 'checked' : ''}><i></i></label>
+      </div></div>`;
+  }).join('');
+  return `<div class="section"><div class="sec-head"><span>⏰ التذكيرات التلقائية</span></div>
     <div class="setbox">
-      <p class="qexplain">التنبيهات بتوصلك حتى والتطبيق مقفول (لو فعّلت تنبيهات الخلفية).</p>
+      <p class="qexplain">التنبيهات بتوصلك في وقتها حتى والتطبيق مقفول (لو فعّلت تنبيهات الخلفية). المواعيد بتتظبط تلقائياً نسبةً للصلاة — وتقدر تحدد وقت بنفسك لو حبيت.</p>
       <div class="acct-row"><span>تنبيهات الخلفية (Push)</span><label class="sw"><input type="checkbox" id="pushOn" ${pushOn ? 'checked' : ''}><i></i></label></div>
-      ${rows.map(([k, l]) => `<div class="rem-row"><span>${l}</span><input type="time" data-rem="${k}" value="${esc(r[k] || '')}"></div>`).join('')}
+      <button class="mini ghost" id="pushTest" style="width:100%;margin:8px 0">🔔 جرّب الإشعار دلوقتي</button>
+      ${rows}
     </div></div>`;
 }
 function wireReminders() {
-  $$('#screen [data-rem]').forEach(i => i.onchange = () => {
+  const setRem = (k, patch) => {
     S.settings.reminders = S.settings.reminders || {};
-    S.settings.reminders[i.dataset.rem] = i.value; saveSettings(); scheduleReminders();
-  });
+    const cur = remConfig()[k];
+    S.settings.reminders[k] = { on: cur.on, time: cur.time, ...patch };
+    saveSettings(); scheduleReminders();
+  };
+  $$('#screen [data-remon]').forEach(i => i.onchange = () => setRem(i.dataset.remon, { on: i.checked }));
+  $$('#screen [data-remt]').forEach(i => i.onchange = () => { setRem(i.dataset.remt, { time: i.value }); renderTools(); });
   const po = $('#pushOn'); if (po) po.onchange = async () => {
-    if (po.checked) {
-      const ok = await enablePush();
-      S.settings.pushEnabled = ok; if (!ok) po.checked = false;
-    } else { S.settings.pushEnabled = false; }
+    if (po.checked) { const ok = await enablePush(); S.settings.pushEnabled = ok; if (!ok) po.checked = false; }
+    else { S.settings.pushEnabled = false; }
     saveSettings();
+  };
+  const pt = $('#pushTest'); if (pt) pt.onclick = async () => {
+    pt.disabled = true; const old = pt.textContent; pt.textContent = 'بيبعت...';
+    try {
+      if (!(S.settings && S.settings.pushEnabled)) { const ok = await enablePush(); S.settings.pushEnabled = ok; saveSettings(); if (!ok) throw new Error('لازم تسمح بالتنبيهات'); }
+      const r = await api('push-test', 'POST', {});
+      alert(r.sent > 0 ? 'تم إرسال إشعار تجربة ✓ المفروض يوصلك خلال ثواني' : 'مفيش إشعار اتبعت — اتأكد إنك سامح بالإشعارات ومفعّل تنبيهات الخلفية');
+    } catch (e) { alert(e.message || 'فعّل تنبيهات الخلفية الأول'); }
+    pt.disabled = false; pt.textContent = old;
   };
 }
 
@@ -285,17 +329,17 @@ function wireReminders() {
 let remTimers = [];
 function scheduleReminders() {
   remTimers.forEach(t => clearTimeout(t)); remTimers = [];
-  const r = (S.settings && S.settings.reminders) || {};
-  const labels = { sabah: 'أذكار الصباح', masa: 'أذكار المساء', wird: 'وِرد القرآن', sleep: 'وقت النوم وأذكاره' };
+  const cfg = remConfig();
   const now = new Date();
-  Object.keys(labels).forEach(k => {
-    const v = r[k]; if (!/^\d{1,2}:\d{2}$/.test(v || '')) return;
+  Object.keys(REM_DEFS).forEach(k => {
+    const c = cfg[k]; if (!c.on) return;
+    const v = c.time || remAutoTime(k); if (!/^\d{1,2}:\d{2}$/.test(v || '')) return;
     const [hh, mm] = v.split(':').map(Number);
     const t = new Date(now); t.setHours(hh, mm, 0, 0);
-    if (t <= now) return; // النهاردة فات
+    if (t <= now) return;
     const ms = t - now; if (ms > 26 * 3600000) return;
     remTimers.push(setTimeout(() => {
-      try { if (window.Notification && Notification.permission === 'granted') new Notification('⏰ ' + labels[k], { body: 'افتكر وردك 🤍', icon: 'icon-192.png' }); } catch (e) {}
+      try { if (window.Notification && Notification.permission === 'granted') new Notification('⏰ ' + REM_DEFS[k].l, { body: 'افتكر وردك 🤍', icon: 'icon-192.png' }); } catch (e) {}
     }, ms));
   });
 }

@@ -101,10 +101,8 @@ const Prayer = (function () {
   // ===== الأذان =====
   let audioEl = null, timer = null;
   function audio() { if (!audioEl) { audioEl = new Audio(); audioEl.preload = 'none'; } return audioEl; }
-  function playAdhan(st) {
-    const a = audio(); a.src = './adhan/' + ((st.adhan && st.adhan.reciter) || 'a1') + '.mp3';
-    a.currentTime = 0; a.play().catch(() => { });
-  }
+  function play(id) { const a = audio(); a.src = './adhan/' + (id || 'a1') + '.mp3'; a.currentTime = 0; a.play().catch(() => { }); }
+  function playAdhan(st) { play((st.adhan && st.adhan.reciter) || 'a1'); }
   function stopAdhan() { if (audioEl) { audioEl.pause(); audioEl.currentTime = 0; } }
   function notify(label) {
     try { if (window.Notification && Notification.permission === 'granted') new Notification('حان وقت ' + label, { body: 'الصلاة خير من النوم 🤍', icon: 'icon-192.png' }); } catch (e) { }
@@ -127,5 +125,6 @@ const Prayer = (function () {
     });
   }
 
-  return { METHODS, CITIES, timesFor, fmt, next, ORDER, schedule, playAdhan, stopAdhan, askNotify, geolocate, tzOffset };
+  function audioEl_() { return audio(); }
+  return { METHODS, CITIES, timesFor, fmt, next, ORDER, schedule, play, playAdhan, stopAdhan, askNotify, geolocate, tzOffset, audioEl: audioEl_ };
 })();
