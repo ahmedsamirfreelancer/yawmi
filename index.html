@@ -281,6 +281,24 @@
   .ad-detail{margin-top:10px;background:#faf9f4;border-radius:10px;padding:12px;font-size:13px;line-height:1.8;color:var(--text)}
   .ad-detail b{color:var(--navy)}
   .ad-reset{display:block;margin-top:10px;background:#fbeaea;color:#c0392b;border:0;border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+
+  /* ===== الديسكتوب: حصر المحتوى في عمود مريح بدل ما يتمطّط ===== */
+  @media (min-width:760px){
+    body{background:#e9e7df}
+    /* البار العلوي يفضل بعرض الشاشة بس محتواه في النص */
+    header{padding-inline:max(16px, calc((100% - 800px) / 2))}
+    /* عمود المحتوى في النص بنفس عرض البار */
+    main{max-width:800px;margin:0 auto;padding:18px 0 120px}
+    /* شريط التبويبات يطفو في النص بدل ما يفرد على العرض كله */
+    #tabs{max-width:380px;margin:0 auto;left:0;right:0;bottom:16px;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 8px 28px rgba(31,58,95,.22)}
+    /* كروت القرآن/الأدوات بحجم لطيف بدل العرض الكامل */
+    .qcard,.ad-card{padding:18px}
+  }
+  /* شاشات واسعة جداً: المهام والأهداف في عمودين لاستغلال المساحة */
+  @media (min-width:1000px){
+    main{max-width:880px}
+    header{padding-inline:max(16px, calc((100% - 880px) / 2))}
+  }
 </style>
 </head>
 <body>
